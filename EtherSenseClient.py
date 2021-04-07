@@ -49,22 +49,22 @@ class ImageClient(asyncore.dispatcher):
 
     def handle_frames(self):
         # convert the frame from string to numerical data
-        color_data = pickle.loads(self.buffer[0:self.color_length])
+        color_array = pickle.loads(self.buffer[0:self.color_length])
 
         depth_end = self.color_length+self.depth_length
-        depth_data = pickle.loads(self.buffer[self.color_length:depth_end])
+        depth_array = pickle.loads(self.buffer[self.color_length:depth_end])
 
         pose_start = self.color_length+self.depth_length
         pose_end = pose_start + self.pose_length
-        pose_data = pickle.loads(self.buffer[pose_start:pose_end])
+        pose_array = pickle.loads(self.buffer[pose_start:pose_end])
 
-        translation = pose_data[0:3]
-        rotation = pose_data[3:6]
+        translation = pose_array[0:3]
+        rotation = pose_array[3:6]
         
         translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
         rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
 
-        big_color = cv2.resize(color_data, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+        big_color = cv2.resize(color_array, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
         cv2.putText(big_color, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
         cv2.putText(big_color, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
         cv2.imshow("window"+str(self.windowName), big_color)
