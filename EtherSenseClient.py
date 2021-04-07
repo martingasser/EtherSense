@@ -6,21 +6,35 @@ import pickle
 import socket
 import struct
 import cv2
+import json
+
+import importlib
 
 mc_ip_address = '224.0.0.1'
 
 port = 1024
 chunk_size = 4096
 
-def main():
+def main(plugin):
     multi_cast_message(mc_ip_address, port, 'EtherSensePing')
+    # defer waiting for a response using Asyncore
+    client = EtherSenseClient(plugin)
+    asyncore.loop()
 
 # client for each camera server 
 class ImageClient(asyncore.dispatcher):
-    def __init__(self, server, source):   
+    def __init__(self, server, source, plugin):   
         asyncore.dispatcher.__init__(self, server)
         self.address = server.getsockname()[0]
         self.port = source[1]
+        if plugin:
+            try:
+                self.plugin = importlib.import_module(plugin)
+            except:
+                print('could not load plugin')
+        else:
+            self.plugin = None
+        
         self.buffer = bytearray()
         self.windowName = self.port
         # open cv window which is unique to the port 
@@ -61,13 +75,19 @@ class ImageClient(asyncore.dispatcher):
         translation = pose_array[0:3]
         rotation = pose_array[3:6]
         
-        translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
-        rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
-
-        big_color = cv2.resize(color_array, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
-        cv2.putText(big_color, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-        cv2.putText(big_color, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-        cv2.imshow("window"+str(self.windowName), big_color)
+        if self.plugin:
+            results = self.plugin.process(color_array)
+            cv2.imshow("window"+str(self.windowName), results[0])
+            features = results[1]
+            # TODO: what to do with the features? output plugin? send via osc?
+            #print(features['num_keypoints'])
+        else:
+            translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
+            rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
+            big_color = cv2.resize(color_array, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+            cv2.putText(big_color, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.putText(big_color, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.imshow("window"+str(self.windowName), big_color)
 
         if cv2.waitKey(1) == 27:
             exit()
@@ -79,8 +99,9 @@ class ImageClient(asyncore.dispatcher):
 
     
 class EtherSenseClient(asyncore.dispatcher):
-    def __init__(self):
+    def __init__(self, plugin):
         asyncore.dispatcher.__init__(self)
+        self.plugin = plugin
         self.server_address = ('', 1024)
         # create a socket for TCP connection between the client and server
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -105,7 +126,7 @@ class EtherSenseClient(asyncore.dispatcher):
             sock, addr = pair
             print ('Incoming connection from %s' % repr(addr))
             # when a connection is attempted, delegate image receival to the ImageClient 
-            handler = ImageClient(sock, addr)
+            handler = ImageClient(sock, addr, self.plugin)
 
 def multi_cast_message(ip_address, port, message):
     multicast_group = (ip_address, port)
@@ -115,10 +136,6 @@ def multi_cast_message(ip_address, port, message):
         # Send data to the multicast group
         print('sending "%s"' % message + str(multicast_group))
         sent = sock.sendto(message.encode(), multicast_group)
-        # defer waiting for a response using Asyncore
-        client = EtherSenseClient()
-        asyncore.loop()
-
     except socket.timeout:
         print('timed out, no more responses')
     finally:
@@ -126,4 +143,7 @@ def multi_cast_message(ip_address, port, message):
         sock.close()
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) == 2:
+        main(sys.argv[1])
+    else:
+        main(None)
