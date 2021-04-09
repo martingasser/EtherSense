@@ -28,8 +28,9 @@ def main():
 
 # client for each camera server 
 class ImageClient(asyncore.dispatcher):
-    def __init__(self, server, source):   
+    def __init__(self, server, source, parent_client):
         asyncore.dispatcher.__init__(self, server)
+        self.parent_client = parent_client
 
         self.run_surface = True
         self.run_yolo = True
@@ -114,7 +115,10 @@ class ImageClient(asyncore.dispatcher):
             for plugin_name in self.plugins:
                 plugin = self.plugins[plugin_name]
                 plugin.stop()
-            exit(0)
+            self.close()
+            self.parent_client.close()
+            
+            
         elif key == ord('s'):
             self.run_surface = not self.run_surface
             self.plugins['plugins.surface'].bypass = self.run_surface
@@ -157,7 +161,7 @@ class EtherSenseClient(asyncore.dispatcher):
             sock, addr = pair
             print ('Incoming connection from %s' % repr(addr))
             # when a connection is attempted, delegate image receival to the ImageClient 
-            handler = ImageClient(sock, addr)
+            handler = ImageClient(sock, addr, self)
 
 def multi_cast_message(ip_address, port, message):
     multicast_group = (ip_address, port)
