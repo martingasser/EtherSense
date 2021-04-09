@@ -9,11 +9,19 @@ import cv2
 import argparse
 import importlib
 
+from pythonosc import udp_client
+
 parser = argparse.ArgumentParser(description='Ethersense client.')
 parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
                     help='a list of plugins')
 parser.add_argument('--process_async', action='store_true')
+
+parser.add_argument('--osc_ip', default='127.0.0.1')
+parser.add_argument('--osc_port', type=int, default=8888)
+
 args = parser.parse_args()
+
+osc_client = udp_client.SimpleUDPClient(args.osc_ip, args.osc_port)
 
 mc_ip_address = '224.0.0.1'
 
@@ -102,6 +110,8 @@ class ImageClient(asyncore.dispatcher):
                     #print(features)
                     # TODO: what to do with the features? output plugin? send via osc?
                     #print(features['num_keypoints'])
+                    if plugin_name == 'plugins.yolo':
+                        osc_client.send_message('/classes', features['classes'])
         else:
             translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
             rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
@@ -109,6 +119,9 @@ class ImageClient(asyncore.dispatcher):
             cv2.putText(big_color, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
             cv2.putText(big_color, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
             cv2.imshow("window"+str(self.windowName), big_color)
+
+        osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
+        osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
 
         key = cv2.waitKey(1)
         if key == 27:
