@@ -20,9 +20,9 @@ class Analysis:
             with open(str(path / 'classes.txt'), 'r') as f:
                 self.class_names = [cname.strip() for cname in f.readlines()]
 
-            self.net = cv2.dnn.readNet(str(path / 'yolov4.weights'), str(path / 'yolov4.cfg'))
-            self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)
-            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+            self.net = cv2.dnn.readNet(str(path / 'yolov4-tiny.weights'), str(path / 'yolov4-tiny.cfg'))
+            self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
             self.model = cv2.dnn_DetectionModel(self.net)
             self.model.setInputParams(size=(320, 320), scale=1/255, swapRB=True)
