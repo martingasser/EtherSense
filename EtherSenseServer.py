@@ -27,6 +27,9 @@ port = 1024
 chunk_size = 4096
 # rs.log_to_console(rs.log_severity.debug)
 
+multicast_server = None
+ethersense_server = None
+
 def create_pipelines():
     ctx = rs.context()
     devices = ctx.query_devices()
@@ -47,8 +50,6 @@ def create_pipelines():
             cfg.enable_device(detected_camera)
             cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
             cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-            # cfg.enable_record_to_file('d435.bag')
-            # cfg.enable_device_from_file('d435.bag')
             pipe.start(cfg)
             pipelines['Intel RealSense D435I'] = pipe
         elif 'Intel RealSense T265' in camera_name:
@@ -56,8 +57,6 @@ def create_pipelines():
             cfg = rs.config()
             cfg.enable_device(detected_camera)
             cfg.enable_stream(rs.stream.pose)
-            # cfg.enable_record_to_file('t265.bag')
-            # cfg.enable_device_from_file('t265.bag')
             pipe.start(cfg)
             pipelines['Intel RealSense T265'] = pipe
     return pipelines
@@ -148,16 +147,6 @@ class EtherSenseServer(asyncore.dispatcher):
                 length_ser = struct.pack('<I', len(ser))
                 plugin_frame_data = b''.join([plugin_frame_data, length_ser, ser])
 
-
-            # color_data = pickle.dumps(color)
-            # depth_data = pickle.dumps(depth)
-            # pose_data = pickle.dumps(pose)
-            # color_length = struct.pack('<I', len(color_data))
-            # depth_length = struct.pack('<I', len(depth_data))
-            # pose_length = struct.pack('<I', len(pose_data))
-	        # # include the current timestamp for the frame
-            # ts = struct.pack('<d', timestamp)
-
             frame_data = b''.join([color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
             frame_length = struct.pack('<I', len(frame_data))
             self.frame_data = b''.join([frame_length, frame_data])
@@ -197,7 +186,7 @@ class MulticastServer(asyncore.dispatcher):
         data, addr = self.socket.recvfrom(42)
         print('Received Multicast message %s bytes from %s' % (data, addr))
 	    # Once the server recives the multicast signal, open the frame server
-        EtherSenseServer(addr, self.pipelines)
+        ethersense_server = EtherSenseServer(addr, self.pipelines)
 
     def writable(self): 
         return False # don't want write notifies
@@ -210,8 +199,16 @@ class MulticastServer(asyncore.dispatcher):
         print('received %s bytes from %s' % (data, addr))
 
 
+import signal
+import sys
+
+def signal_handler(sig, frame):    
+    sys.exit(0)
+    
+signal.signal(signal.SIGINT, signal_handler)
+
 def main(argv):
-    server = MulticastServer()
+    multicast_server = MulticastServer()
     asyncore.loop()
    
 if __name__ == '__main__':
