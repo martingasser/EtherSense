@@ -106,11 +106,16 @@ class ImageClient(asyncore.dispatcher):
         pose_array = pickle.loads(self.buffer[pose_start:pose_end])
 
 
-        plugin_frame_length = struct.unpack('<I', self.buffer[pose_end:pose_end+4])[0]
-        plugin_id = bytes(self.buffer[pose_end+4:pose_end+8])
+        plugin_data_start = pose_end
+
+        plugin_frame_length = struct.unpack('<I', self.buffer[plugin_data_start:plugin_data_start+4])[0]
+        plugin_id = bytes(self.buffer[plugin_data_start+4:plugin_data_start+8])
         
-        deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer[pose_end+4:pose_end+4+plugin_frame_length])
-        print(deserialized_features)
+        while plugin_data_start < len(self.buffer):
+            if plugin_id in self.plugins:
+                deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer[plugin_data_start+4:plugin_data_start+4+plugin_frame_length])
+                print(deserialized_features)
+            plugin_data_start += plugin_frame_length+4
 
         translation = pose_array[0:3]
         rotation = pose_array[3:6]

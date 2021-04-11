@@ -57,17 +57,23 @@ class Plugin(EtherSensePlugin):
         classes_ser = pickle.dumps(features['classes'])
         scores_ser = pickle.dumps(features['scores'])
         bytes_classes_ser = struct.pack('<I', len(classes_ser))
-        bytes_scores_ser = struct.pack('<I', len(classes_ser))
+        bytes_scores_ser = struct.pack('<I', len(scores_ser))
         return b''.join([id_ser, bytes_classes_ser, classes_ser, bytes_scores_ser, scores_ser])
 
     
     @staticmethod
     def deserialize_features(data):
         id_deser = data[0:4]
+
         bytes_classes_deser = struct.unpack('<I', data[4:8])[0]
-        classes_deser = pickle.loads(data[8:8+bytes_classes_deser])
-        bytes_scores_deser = struct.unpack('<I', data[8+bytes_classes_deser:8+bytes_classes_deser+4])[0]
-        scores_deser = pickle.loads(data[8+bytes_scores_deser+4:8+bytes_scores_deser+4+bytes_scores_deser])
+        start = 8
+        end = start + bytes_classes_deser
+        classes_deser = pickle.loads(data[start:end])
+        
+        bytes_scores_deser = struct.unpack('<I', data[end:end+4])[0]
+        start = end+4
+        end = start + bytes_scores_deser
+        scores_deser = pickle.loads(data[start:end])
         
         features = {
             'classes': classes_deser,
