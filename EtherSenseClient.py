@@ -96,17 +96,20 @@ class ImageClient(asyncore.dispatcher):
 
 
         plugin_data_start = pose_end
-
-        plugin_frame_length = struct.unpack('<I', self.buffer[plugin_data_start:plugin_data_start+4])[0]
-        plugin_id = bytes(self.buffer[plugin_data_start+4:plugin_data_start+8])
         
         yolo_features = None
 
         while plugin_data_start < len(self.buffer):
+            plugin_frame_length = struct.unpack('<I', self.buffer[plugin_data_start:plugin_data_start+4])[0]
+            plugin_id = bytes(self.buffer[plugin_data_start+4:plugin_data_start+8])
+
             if plugin_id in self.plugins:
                 deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer[plugin_data_start+4:plugin_data_start+4+plugin_frame_length])
                 if plugin_id == b'yolo':
                     yolo_features = deserialized_features
+                elif plugin_id == b'surf':
+                    #print(deserialized_features)
+                    pass
             plugin_data_start += plugin_frame_length+4
 
         translation = pose_array[0:3]
