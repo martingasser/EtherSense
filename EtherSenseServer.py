@@ -147,7 +147,7 @@ class EtherSenseServer(asyncore.dispatcher):
                 length_ser = struct.pack('<I', len(ser))
                 plugin_frame_data = b''.join([plugin_frame_data, length_ser, ser])
 
-            frame_data = b''.join([color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
+            frame_data = b''.join([ts, color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
             frame_length = struct.pack('<I', len(frame_data))
             self.frame_data = b''.join([frame_length, frame_data])
 

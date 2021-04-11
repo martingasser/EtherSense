@@ -77,21 +77,22 @@ class ImageClient(asyncore.dispatcher):
     def handle_frames(self):
         # convert the frame from string to numerical data
         
-        self.color_length = struct.unpack('<I', self.buffer[0:4])[0]
-        self.depth_length = struct.unpack('<I', self.buffer[4:8])[0]
-        self.pose_length = struct.unpack('<I', self.buffer[8:12])[0]
+        timestamp = struct.unpack('<d', self.buffer[0:8])[0]
+        color_length = struct.unpack('<I', self.buffer[8:12])[0]
+        depth_length = struct.unpack('<I', self.buffer[12:16])[0]
+        pose_length = struct.unpack('<I', self.buffer[16:20])[0]
         # get the timestamp of the current frame
 
-        color_start = 12
-        color_end = color_start+self.color_length
+        color_start = 20
+        color_end = color_start+color_length
         color_array = pickle.loads(self.buffer[color_start:color_end])
 
         depth_start = color_end
-        depth_end = depth_start + self.depth_length
+        depth_end = depth_start + depth_length
         depth_array = pickle.loads(self.buffer[depth_start:depth_end])
 
         pose_start = depth_end
-        pose_end = pose_start + self.pose_length
+        pose_end = pose_start + pose_length
         pose_array = pickle.loads(self.buffer[pose_start:pose_end])
 
 
