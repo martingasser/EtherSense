@@ -11,19 +11,11 @@ import argparse
 import importlib
 from plugins import import_plugins
 
-from pythonosc import udp_client
-
 parser = argparse.ArgumentParser(description='Ethersense client.')
 parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
                     help='a list of plugins')
-parser.add_argument('--process_async', action='store_true')
-
-parser.add_argument('--osc_ip', default='127.0.0.1')
-parser.add_argument('--osc_port', type=int, default=8888)
 
 args = parser.parse_args()
-
-osc_client = udp_client.SimpleUDPClient(args.osc_ip, args.osc_port)
 
 mc_ip_address = '224.0.0.1'
 
@@ -81,8 +73,7 @@ class ImageClient(asyncore.dispatcher):
         color_length = struct.unpack('<I', self.buffer[8:12])[0]
         depth_length = struct.unpack('<I', self.buffer[12:16])[0]
         pose_length = struct.unpack('<I', self.buffer[16:20])[0]
-        # get the timestamp of the current frame
-
+        
         color_start = 20
         color_end = color_start+color_length
         color_array = pickle.loads(self.buffer[color_start:color_end])
@@ -94,7 +85,6 @@ class ImageClient(asyncore.dispatcher):
         pose_start = depth_end
         pose_end = pose_start + pose_length
         pose_array = pickle.loads(self.buffer[pose_start:pose_end])
-
 
         plugin_data_start = pose_end
         
@@ -134,22 +124,11 @@ class ImageClient(asyncore.dispatcher):
             
         cv2.imshow("window"+str(self.windowName), color_array)
 
-        osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
-        osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
-
         key = cv2.waitKey(1)
         if key == 27:
             self.close()
             self.parent_client.close()
             
-            
-        # elif key == ord('s'):
-        #     self.run_surface = not self.run_surface
-        #     self.plugins['plugins.surface'].bypass = self.run_surface
-        # elif key == ord('y'):
-        #     self.run_yolo = not self.run_yolo
-        #     self.plugins['plugins.yolo'].bypass = self.run_yolo
-    
         self.buffer = bytearray()
         self.frame_id += 1
     
