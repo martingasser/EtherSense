@@ -87,7 +87,7 @@ class ImageClient(asyncore.dispatcher):
 
         # process plugin data
         while len(self.buffer) < self.frame_length:
-            length_deser = struct.unpack('<I', self.recv(4))
+            length_deser = struct.unpack('<I', self.recv(4))[0]
             data = self.recv(length_deser)
 
         self.handle_frames()
