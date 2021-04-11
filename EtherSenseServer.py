@@ -10,6 +10,7 @@ import struct
 import importlib
 from plugins import import_plugins
 from threading import Barrier
+from pythonosc import udp_client
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
 parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
@@ -21,6 +22,10 @@ parser.add_argument('--osc_port', type=int, default=8888)
 
 args = parser.parse_args()
 
+osc_client = None
+
+if args.osc_ip is not None:
+    osc_client = udp_client.SimpleUDPClient(args.osc_ip, args.osc_port)
 
 mc_ip_address = '224.0.0.1'
 port = 1024
@@ -127,34 +132,49 @@ class EtherSenseServer(asyncore.dispatcher):
 
     def update_frame(self):
         color, depth, pose, timestamp = get_camera_data(self.pipelines, self.decimate_filter, self.align)
-        if depth is not None:
+        #if depth is not None:
+        translation = pose[0:3]
+        rotation = pose[3:6]
+        if osc_client:
+            osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
+            osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
 
-            color_data = pickle.dumps(color)
-            depth_data = pickle.dumps(depth)
-            pose_data = pickle.dumps(pose)
-            color_length = struct.pack('<I', len(color_data))
-            depth_length = struct.pack('<I', len(depth_data))
-            pose_length = struct.pack('<I', len(pose_data))
-	        # include the current timestamp for the frame
-            ts = struct.pack('<d', timestamp)
+        color_data = pickle.dumps(color)
+        depth_data = pickle.dumps(depth)
+        pose_data = pickle.dumps(pose)
+        color_length = struct.pack('<I', len(color_data))
+        depth_length = struct.pack('<I', len(depth_data))
+        pose_length = struct.pack('<I', len(pose_data))
+        # include the current timestamp for the frame
+        ts = struct.pack('<d', timestamp)
 
-            plugin_frame_data = b''
+        plugin_frame_data = b''
 
-            for plugin_id in self.plugins:
-                plugin = self.plugins[plugin_id]
-                results = plugin(color.copy())
-                ser = plugin.serialize_features(results[1])
+        for plugin_id in self.plugins:
+            plugin = self.plugins[plugin_id]
+            results = plugin(color.copy())
+            if results is not None:
+                features = results[1]
+                ser = plugin.serialize_features(features)
                 length_ser = struct.pack('<I', len(ser))
                 plugin_frame_data = b''.join([plugin_frame_data, length_ser, ser])
 
-            frame_data = b''.join([ts, color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
-            frame_length = struct.pack('<I', len(frame_data))
-            self.frame_data = b''.join([frame_length, frame_data])
+                if plugin.plugin_id == b'yolo':
+                    if osc_client:
+                        osc_client.send_message('/classes', features['classes'])
+
+        frame_data = b''.join([ts, color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
+        frame_length = struct.pack('<I', len(frame_data))
+        self.frame_data = b''.join([frame_length, frame_data])
 
     def handle_write(self):
 	    # first time the handle_write is called
         if not hasattr(self, 'frame_data'):
             self.update_frame()
+        
+        if self.frame_data is None:
+            return
+
 	    # the frame has been sent in it entirety so get the latest frame
         if len(self.frame_data) == 0:
 	        self.update_frame()
