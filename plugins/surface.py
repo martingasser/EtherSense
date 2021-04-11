@@ -45,8 +45,9 @@ class Plugin(EtherSensePlugin):
     def deserialize_features(data):
         id_deser = data[0:4]
         num_keypoints_deser = struct.unpack('<I', data[4:8])[0]
-        keypoints_deser = pickle.loads(data[8:8 + num_keypoints_deser*4])
+        keypoints_deser = pickle.loads(data[8:8 + num_keypoints_deser])
         features = {
             'keypoints': keypoints_deser,
             'num_keypoints': len(keypoints_deser)
         }
+        return features

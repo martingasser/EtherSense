@@ -72,57 +72,49 @@ class ImageClient(asyncore.dispatcher):
     def handle_read(self):
         if self.remainingBytes == 0:
             # get the expected frame size
-            self.color_length = struct.unpack('<I', self.recv(4))[0]
-            self.depth_length = struct.unpack('<I', self.recv(4))[0]
-            self.pose_length = struct.unpack('<I', self.recv(4))[0]
-            # get the timestamp of the current frame
-            self.timestamp = struct.unpack('<d', self.recv(8))
-            self.frame_length = self.color_length + self.depth_length + self.pose_length
+            self.frame_length = struct.unpack('<I', self.recv(4))[0]
             self.remainingBytes = self.frame_length
         
         # request the frame data until the frame is completely in buffer
-        data = self.recv(self.remainingBytes)
-        self.buffer += data
-        self.remainingBytes -= len(data)
-
-        # process plugin data
-        while len(self.buffer) < self.frame_length:
-            length_deser = struct.unpack('<I', self.recv(4))[0]
-            data = self.recv(length_deser)
-
-        self.handle_frames()
-
+        if self.remainingBytes > 0:
+            data = self.recv(self.remainingBytes)
+            self.buffer += data
+            self.remainingBytes -= len(data)
+        
         # once the frame is fully recieved, process/display it
-        # if len(self.buffer) == self.frame_length:
-        #     self.handle_frames()
+        if len(self.buffer) == self.frame_length:
+            self.handle_frames()
 
     def handle_frames(self):
         # convert the frame from string to numerical data
-        color_array = pickle.loads(self.buffer[0:self.color_length])
+        
+        self.color_length = struct.unpack('<I', self.buffer[0:4])[0]
+        self.depth_length = struct.unpack('<I', self.buffer[4:8])[0]
+        self.pose_length = struct.unpack('<I', self.buffer[8:12])[0]
+        # get the timestamp of the current frame
 
-        depth_end = self.color_length+self.depth_length
-        depth_array = pickle.loads(self.buffer[self.color_length:depth_end])
+        color_start = 12
+        color_end = color_start+self.color_length
+        color_array = pickle.loads(self.buffer[color_start:color_end])
 
-        pose_start = self.color_length+self.depth_length
+        depth_start = color_end
+        depth_end = depth_start + self.depth_length
+        depth_array = pickle.loads(self.buffer[depth_start:depth_end])
+
+        pose_start = depth_end
         pose_end = pose_start + self.pose_length
         pose_array = pickle.loads(self.buffer[pose_start:pose_end])
+
+
+        plugin_frame_length = struct.unpack('<I', self.buffer[pose_end:pose_end+4])[0]
+        plugin_id = bytes(self.buffer[pose_end+4:pose_end+8])
+        
+        deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer[pose_end+4:pose_end+4+plugin_frame_length])
+        print(deserialized_features)
 
         translation = pose_array[0:3]
         rotation = pose_array[3:6]
         
-        # if len(self.plugins):
-        #     for plugin_name in self.plugins:
-        #         plugin = self.plugins[plugin_name]
-        #         results = plugin(color_array)
-        #         if results:
-        #             cv2.imshow(f'window {plugin.name}', results[0])
-        #             features = results[1]
-        #             #print(features)
-        #             # TODO: what to do with the features? output plugin? send via osc?
-        #             #print(features['num_keypoints'])
-        #             if plugin_name == 'plugins.yolo':
-        #                 osc_client.send_message('/classes', features['classes'])
-        # else:
         translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
         rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
         big_color = cv2.resize(color_array, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
@@ -135,9 +127,6 @@ class ImageClient(asyncore.dispatcher):
 
         key = cv2.waitKey(1)
         if key == 27:
-            # for plugin_name in self.plugins:
-            #     plugin = self.plugins[plugin_name]
-            #     plugin.stop()
             self.close()
             self.parent_client.close()
             
