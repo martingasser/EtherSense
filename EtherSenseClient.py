@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import sys, getopt
+import signal
 import asyncore
 import numpy as np
 import pickle
@@ -195,6 +196,12 @@ def multi_cast_message(ip_address, port, message):
     finally:
         print(sys.stderr, 'closing socket')
         sock.close()
+
+def signal_handler(sig, frame):    
+    sys.exit(0)
+    
+signal.signal(signal.SIGINT, signal_handler)
+
 
 if __name__ == '__main__':
     main()
