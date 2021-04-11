@@ -1,11 +1,26 @@
 #!/usr/bin/python
 import pyrealsense2 as rs
 import sys, getopt
+import argparse
 import asyncore
 import numpy as np
 import pickle
 import socket
 import struct
+import importlib
+from plugins import import_plugins
+from threading import Barrier
+
+parser = argparse.ArgumentParser(description='Ethersense client.')
+parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
+                    help='a list of plugins')
+parser.add_argument('--process_async', action='store_true')
+
+parser.add_argument('--osc_ip', default='127.0.0.1')
+parser.add_argument('--osc_port', type=int, default=8888)
+
+args = parser.parse_args()
+
 
 mc_ip_address = '224.0.0.1'
 port = 1024
@@ -74,14 +89,24 @@ def get_camera_data(pipelines, image_filter, align):
         return None, None           
 		
 class EtherSenseServer(asyncore.dispatcher):
-    def __init__(self, address):
+    def __init__(self, address, pipelines):
         asyncore.dispatcher.__init__(self)
-        print("Launching Realsense Camera Server")
-        try:
-            self.pipelines = create_pipelines()
-        except:
-            print("Unexpected error: ", sys.exc_info()[1])
-            sys.exit(1)
+
+        self.pipelines = pipelines
+
+        self.plugins = {}
+        if args.plugins:
+            self.barrier = Barrier(len(args.plugins))
+            try:
+                plugin_classes = import_plugins(args.plugins)
+                for plugin_id in plugin_classes:
+                    PluginClass = plugin_classes[plugin_id]
+                    self.plugins[PluginClass.plugin_id] = PluginClass(process_async=args.process_async, barrier=self.barrier)
+            except Exception as ex:
+                print(ex)
+            
+
+
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         print('sending acknowledgement to', address)
         
@@ -104,7 +129,7 @@ class EtherSenseServer(asyncore.dispatcher):
     def update_frame(self):
         color, depth, pose, timestamp = get_camera_data(self.pipelines, self.decimate_filter, self.align)
         if depth is not None:
-	        # convert the depth image to a string for broadcast
+
             color_data = pickle.dumps(color)
             depth_data = pickle.dumps(depth)
             pose_data = pickle.dumps(pose)
@@ -113,7 +138,26 @@ class EtherSenseServer(asyncore.dispatcher):
             pose_length = struct.pack('<I', len(pose_data))
 	        # include the current timestamp for the frame
             ts = struct.pack('<d', timestamp)
-            self.frame_data = b''.join([color_length, depth_length, pose_length, ts, color_data, depth_data, pose_data])
+
+            plugin_frame_data = b''
+
+            for plugin_id in self.plugins:
+                plugin = self.plugins[plugin_id]
+                results = plugin(color.copy())
+                ser = plugin.serialize_features(results[1])
+                length_ser = struct.pack('<I', len(ser))
+                plugin_frame_data = plugin_frame_data.join([length_ser, ser])
+
+
+            # color_data = pickle.dumps(color)
+            # depth_data = pickle.dumps(depth)
+            # pose_data = pickle.dumps(pose)
+            # color_length = struct.pack('<I', len(color_data))
+            # depth_length = struct.pack('<I', len(depth_data))
+            # pose_length = struct.pack('<I', len(pose_data))
+	        # # include the current timestamp for the frame
+            # ts = struct.pack('<d', timestamp)
+            self.frame_data = b''.join([color_length, depth_length, pose_length, ts, color_data, depth_data, pose_data, plugin_frame_data])
 
     def handle_write(self):
 	    # first time the handle_write is called
@@ -133,16 +177,24 @@ class EtherSenseServer(asyncore.dispatcher):
 class MulticastServer(asyncore.dispatcher):
     def __init__(self, host = mc_ip_address, port=1024):
         asyncore.dispatcher.__init__(self)
+
+        print("Launching Realsense Camera Server")
+        try:
+            self.pipelines = create_pipelines()
+        except:
+            print("Unexpected error: ", sys.exc_info()[1])
+            sys.exit(1)
+
         server_address = ('', port)
         self.create_socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.bind(server_address) 	
+        self.bind(server_address)
 
     def handle_read(self):
         data, addr = self.socket.recvfrom(42)
         print('Received Multicast message %s bytes from %s' % (data, addr))
 	    # Once the server recives the multicast signal, open the frame server
-        EtherSenseServer(addr)
+        EtherSenseServer(addr, self.pipelines)
 
     def writable(self): 
         return False # don't want write notifies

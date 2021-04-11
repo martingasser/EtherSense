@@ -8,6 +8,7 @@ import struct
 import cv2
 import argparse
 import importlib
+from plugins import import_plugins
 
 from pythonosc import udp_client
 
@@ -45,25 +46,26 @@ class ImageClient(asyncore.dispatcher):
 
         self.address = server.getsockname()[0]
         self.port = source[1]
-        self.plugins = {}
+        self.plugins = None
         if args.plugins:
-            try:
-                for plugin in args.plugins:
-                    plugin_lib = importlib.import_module(plugin)
-                    self.plugins[plugin] = plugin_lib.Analysis(process_async=args.process_async)
-            except:
-                print('could not load plugin')
+            self.plugins = import_plugins(args.plugins)
+        #     try:
+        #         for plugin in args.plugins:
+        #             plugin_lib = importlib.import_module(plugin)
+        #             self.plugins[plugin] = plugin_lib.Analysis(process_async=args.process_async)
+        #     except:
+        #         print('could not load plugin')
         
         self.buffer = bytearray()
         self.windowName = self.port
         # open cv window which is unique to the port
 
-        if len(self.plugins):
-            for plugin_name in self.plugins:
-                plugin = self.plugins[plugin_name]
-                cv2.namedWindow(f'window {plugin.name}')
-        else:
-            cv2.namedWindow("window"+str(self.windowName))
+        # if len(self.plugins):
+        #     for plugin_name in self.plugins:
+        #         plugin = self.plugins[plugin_name]
+        #         cv2.namedWindow(f'window {plugin.name}')
+        # else:
+        cv2.namedWindow("window"+str(self.windowName))
         self.remainingBytes = 0
         self.frame_id = 0
        
@@ -82,9 +84,17 @@ class ImageClient(asyncore.dispatcher):
         data = self.recv(self.remainingBytes)
         self.buffer += data
         self.remainingBytes -= len(data)
+
+        # process plugin data
+        while len(self.buffer) < self.frame_length:
+            length_deser = struct.unpack('<I', self.recv(4))
+            data = self.recv(length_deser)
+
+        self.handle_frames()
+
         # once the frame is fully recieved, process/display it
-        if len(self.buffer) == self.frame_length:
-            self.handle_frames()
+        # if len(self.buffer) == self.frame_length:
+        #     self.handle_frames()
 
     def handle_frames(self):
         # convert the frame from string to numerical data
@@ -100,44 +110,44 @@ class ImageClient(asyncore.dispatcher):
         translation = pose_array[0:3]
         rotation = pose_array[3:6]
         
-        if len(self.plugins):
-            for plugin_name in self.plugins:
-                plugin = self.plugins[plugin_name]
-                results = plugin(color_array)
-                if results:
-                    cv2.imshow(f'window {plugin.name}', results[0])
-                    features = results[1]
-                    #print(features)
-                    # TODO: what to do with the features? output plugin? send via osc?
-                    #print(features['num_keypoints'])
-                    if plugin_name == 'plugins.yolo':
-                        osc_client.send_message('/classes', features['classes'])
-        else:
-            translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
-            rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
-            big_color = cv2.resize(color_array, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
-            cv2.putText(big_color, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-            cv2.putText(big_color, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-            cv2.imshow("window"+str(self.windowName), big_color)
+        # if len(self.plugins):
+        #     for plugin_name in self.plugins:
+        #         plugin = self.plugins[plugin_name]
+        #         results = plugin(color_array)
+        #         if results:
+        #             cv2.imshow(f'window {plugin.name}', results[0])
+        #             features = results[1]
+        #             #print(features)
+        #             # TODO: what to do with the features? output plugin? send via osc?
+        #             #print(features['num_keypoints'])
+        #             if plugin_name == 'plugins.yolo':
+        #                 osc_client.send_message('/classes', features['classes'])
+        # else:
+        translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
+        rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
+        big_color = cv2.resize(color_array, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+        cv2.putText(big_color, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+        cv2.putText(big_color, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+        cv2.imshow("window"+str(self.windowName), big_color)
 
         osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
         osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
 
         key = cv2.waitKey(1)
         if key == 27:
-            for plugin_name in self.plugins:
-                plugin = self.plugins[plugin_name]
-                plugin.stop()
+            # for plugin_name in self.plugins:
+            #     plugin = self.plugins[plugin_name]
+            #     plugin.stop()
             self.close()
             self.parent_client.close()
             
             
-        elif key == ord('s'):
-            self.run_surface = not self.run_surface
-            self.plugins['plugins.surface'].bypass = self.run_surface
-        elif key == ord('y'):
-            self.run_yolo = not self.run_yolo
-            self.plugins['plugins.yolo'].bypass = self.run_yolo
+        # elif key == ord('s'):
+        #     self.run_surface = not self.run_surface
+        #     self.plugins['plugins.surface'].bypass = self.run_surface
+        # elif key == ord('y'):
+        #     self.run_yolo = not self.run_yolo
+        #     self.plugins['plugins.yolo'].bypass = self.run_yolo
     
         self.buffer = bytearray()
         self.frame_id += 1
