@@ -49,22 +49,10 @@ class ImageClient(asyncore.dispatcher):
         self.plugins = None
         if args.plugins:
             self.plugins = import_plugins(args.plugins)
-        #     try:
-        #         for plugin in args.plugins:
-        #             plugin_lib = importlib.import_module(plugin)
-        #             self.plugins[plugin] = plugin_lib.Analysis(process_async=args.process_async)
-        #     except:
-        #         print('could not load plugin')
         
         self.buffer = bytearray()
         self.windowName = self.port
         # open cv window which is unique to the port
-
-        # if len(self.plugins):
-        #     for plugin_name in self.plugins:
-        #         plugin = self.plugins[plugin_name]
-        #         cv2.namedWindow(f'window {plugin.name}')
-        # else:
         cv2.namedWindow("window"+str(self.windowName))
         self.remainingBytes = 0
         self.frame_id = 0
@@ -111,10 +99,13 @@ class ImageClient(asyncore.dispatcher):
         plugin_frame_length = struct.unpack('<I', self.buffer[plugin_data_start:plugin_data_start+4])[0]
         plugin_id = bytes(self.buffer[plugin_data_start+4:plugin_data_start+8])
         
+        yolo_features = None
+
         while plugin_data_start < len(self.buffer):
             if plugin_id in self.plugins:
                 deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer[plugin_data_start+4:plugin_data_start+4+plugin_frame_length])
-                print(deserialized_features)
+                if plugin_id == b'yolo':
+                    yolo_features = deserialized_features
             plugin_data_start += plugin_frame_length+4
 
         translation = pose_array[0:3]
@@ -122,10 +113,21 @@ class ImageClient(asyncore.dispatcher):
         
         translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
         rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
-        big_color = cv2.resize(color_array, (0,0), fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
-        cv2.putText(big_color, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-        cv2.putText(big_color, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-        cv2.imshow("window"+str(self.windowName), big_color)
+
+        cv2.putText(color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+        cv2.putText(color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+        
+
+        if yolo_features:
+            color = (255, 0, 0)
+            
+            classes = []
+            for (classname, score, box) in zip(yolo_features['classes'], yolo_features['scores'], yolo_features['boxes']):
+                label = "%s : %f" % (classname, score)
+                cv2.rectangle(color_array, box, color, 2)
+                cv2.putText(color_array, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            
+        cv2.imshow("window"+str(self.windowName), color_array)
 
         osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
         osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
