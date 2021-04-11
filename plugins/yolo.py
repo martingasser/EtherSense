@@ -3,6 +3,9 @@ import pathlib
 import queue
 from threading import Thread, Barrier
 from .plugin import EtherSensePlugin
+import pickle
+import struct
+
 
 CONFIDENCE_THRESHOLD = 0.2
 NMS_THRESHOLD = 0.4
