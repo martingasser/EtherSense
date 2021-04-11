@@ -146,7 +146,7 @@ class EtherSenseServer(asyncore.dispatcher):
                 results = plugin(color.copy())
                 ser = plugin.serialize_features(results[1])
                 length_ser = struct.pack('<I', len(ser))
-                plugin_frame_data = plugin_frame_data.join([length_ser, ser])
+                plugin_frame_data = b''.join([plugin_frame_data, length_ser, ser])
 
 
             # color_data = pickle.dumps(color)
@@ -157,7 +157,10 @@ class EtherSenseServer(asyncore.dispatcher):
             # pose_length = struct.pack('<I', len(pose_data))
 	        # # include the current timestamp for the frame
             # ts = struct.pack('<d', timestamp)
-            self.frame_data = b''.join([color_length, depth_length, pose_length, ts, color_data, depth_data, pose_data, plugin_frame_data])
+
+            frame_data = b''.join([color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
+            frame_length = struct.pack('<I', len(frame_data))
+            self.frame_data = b''.join([frame_length, frame_data])
 
     def handle_write(self):
 	    # first time the handle_write is called
