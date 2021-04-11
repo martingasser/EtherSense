@@ -46,7 +46,8 @@ class Plugin(EtherSensePlugin):
 
         features = {
             'classes': classes,
-            'scores': scores
+            'scores': scores,
+            'boxes': boxes
         }
         return (frame, features)
 
@@ -56,9 +57,11 @@ class Plugin(EtherSensePlugin):
         id_ser = Plugin.plugin_id
         classes_ser = pickle.dumps(features['classes'])
         scores_ser = pickle.dumps(features['scores'])
+        boxes_ser = pickle.dumps(features['boxes'])
         bytes_classes_ser = struct.pack('<I', len(classes_ser))
         bytes_scores_ser = struct.pack('<I', len(scores_ser))
-        return b''.join([id_ser, bytes_classes_ser, classes_ser, bytes_scores_ser, scores_ser])
+        bytes_boxes_ser = struct.pack('<I', len(boxes_ser))
+        return b''.join([id_ser, bytes_classes_ser, classes_ser, bytes_scores_ser, scores_ser, bytes_boxes_ser, boxes_ser])
 
     
     @staticmethod
@@ -75,8 +78,14 @@ class Plugin(EtherSensePlugin):
         end = start + bytes_scores_deser
         scores_deser = pickle.loads(data[start:end])
         
+        bytes_boxes_deser = struct.unpack('<I', data[end:end+4])[0]
+        start = end+4
+        end = start + bytes_boxes_deser
+        boxes_deser = pickle.loads(data[start:end])
+
         features = {
             'classes': classes_deser,
-            'scores': scores_deser
+            'scores': scores_deser,
+            'boxes': boxes_deser
         }
         return features
