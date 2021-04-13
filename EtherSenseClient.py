@@ -94,8 +94,8 @@ class ImageClient(ZmqDispatcher):
         self.buffer = bytearray()
         #self.windowName = self.port
         # open cv window which is unique to the port
-        if args.gui:
-            cv2.namedWindow("window"+str(self.windowName))
+        # if args.gui:
+        #     cv2.namedWindow("window"+str(self.windowName))
         self.frame_id = 0
        
     def handle_read(self):
@@ -150,7 +150,7 @@ class ImageClient(ZmqDispatcher):
         
         if hasattr(self, 'color_array'):
             if args.gui:
-                cv2.imshow("window"+str(self.windowName), self.color_array)
+                cv2.imshow("window", self.color_array)
         
         if args.gui:
             key = cv2.waitKey(1)
