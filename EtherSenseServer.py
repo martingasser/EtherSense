@@ -11,6 +11,7 @@ import importlib
 from plugins import import_plugins
 from threading import Barrier
 from pythonosc import udp_client
+import zmq
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
 parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
@@ -91,10 +92,49 @@ def get_camera_data(pipelines, image_filter, align):
         return color_mat, depth_mat, pose_mat, ts
     else:
         return None, None           
-		
-class EtherSenseServer(asyncore.dispatcher):
+
+class ZmqDispatcher(asyncore.dispatcher):
+
+    def __init__(self, socket, map=None, *args, **kwargs):
+        asyncore.dispatcher.__init__(self, None, map)
+        self.set_socket(socket)
+        print('init')
+       
+    def set_socket(self, sock, map=None):
+        self.socket = sock
+        self._fileno = sock.getsockopt(zmq.FD)
+        self.add_channel(map)
+    
+    def bind(self, *args):
+        self.socket.bind(self, *args)
+    
+    def connect(self, *args):
+        self.socket.connect(*args)
+        self.connected = True
+
+    def writable(self):
+        return False
+    
+    def send(self, data, *args):
+        self.socket.send(data, *args)
+    
+    def recv(self, *args):
+        return self.socket.recv(*args)
+
+    def handle_read_event(self):
+        # check if really readable
+        revents = self.socket.getsockopt(zmq.EVENTS)
+        while revents & zmq.POLLIN:
+            self.handle_read()
+            revents = self.socket.getsockopt(zmq.EVENTS)
+
+    def handle_read(self):
+        print("ERROR: You should overwrite the handle_read method!!!")
+
+class EtherSenseServer(ZmqDispatcher):
     def __init__(self, address, pipelines):
-        asyncore.dispatcher.__init__(self)
+        
+        ZmqDispatcher.__init__(self)
 
         self.pipelines = pipelines
 
@@ -119,7 +159,7 @@ class EtherSenseServer(asyncore.dispatcher):
         self.decimate_filter.set_option(rs.option.filter_magnitude, 2)
         self.frame_data = ''
         self.connect((address[0], 1024))
-        self.packet_id = 0
+        # self.packet_id = 0
 
         align_to = rs.stream.color
         self.align = rs.align(align_to)
@@ -197,6 +237,28 @@ class MulticastServer(asyncore.dispatcher):
             print("Unexpected error: ", sys.exc_info()[1])
             sys.exit(1)
 
+        self.plugins = {}
+        if args.plugins:
+            self.barrier = Barrier(len(args.plugins))
+            try:
+                plugin_classes = import_plugins(args.plugins)
+                for plugin_id in plugin_classes:
+                    PluginClass = plugin_classes[plugin_id]
+                    self.plugins[PluginClass.plugin_id] = PluginClass(process_async=args.process_async, barrier=self.barrier)
+            except Exception as ex:
+                print(ex)
+
+        self.decimate_filter = rs.decimation_filter()
+        self.decimate_filter.set_option(rs.option.filter_magnitude, 2)
+        self.frame_data = ''
+
+        align_to = rs.stream.color
+        self.align = rs.align(align_to)
+
+        ctx = zmq.Context()
+        self.zmq_socket = ctx.socket(zmq.PUB)
+        self.zmq_socket.bind("tcp://*:%d" % port)
+
         server_address = ('', port)
         self.create_socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -204,12 +266,46 @@ class MulticastServer(asyncore.dispatcher):
 
     def handle_read(self):
         data, addr = self.socket.recvfrom(42)
-        print('Received Multicast message %s bytes from %s' % (data, addr))
-	    # Once the server recives the multicast signal, open the frame server
-        ethersense_server = EtherSenseServer(addr, self.pipelines)
+        print(f'Received Multicast message {data.decode()} from {repr(addr)}')
+
+        self.socket.sendto(b'pong', addr)
+    
+    def handle_write(self):
+        color, depth, pose, timestamp = get_camera_data(self.pipelines, self.decimate_filter, self.align)
+
+        translation = pose[0:3]
+        rotation = pose[3:6]
+        if osc_client:
+            osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
+            osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
+
+        color_data = pickle.dumps(color)
+        depth_data = pickle.dumps(depth)
+        pose_data = pickle.dumps(pose)
+        ts = struct.pack('<d', timestamp)
+
+        self.zmq_socket.send_multipart([b'TIME', ts])
+        self.zmq_socket.send_multipart([b'RGB', color_data])
+        self.zmq_socket.send_multipart([b'DEPTH', depth_data])
+        self.zmq_socket.send_multipart([b'POSE', pose_data])
+
+        plugin_frame_data = b''
+
+        for plugin_id in self.plugins:
+            plugin = self.plugins[plugin_id]
+            results = plugin(color.copy())
+            if results is not None:
+                features = results[1]
+                ser = plugin.serialize_features(features)
+                self.zmq_socket.send_multipart([plugin.plugin_id, ser])
+
+                if plugin.plugin_id == b'yolo':
+                    if osc_client:
+                        osc_client.send_message('/classes', features['classes'])          
+
 
     def writable(self): 
-        return False # don't want write notifies
+        return True
 
     def handle_close(self):
         self.close()
