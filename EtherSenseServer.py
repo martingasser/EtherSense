@@ -108,9 +108,7 @@ class EtherSenseServer(asyncore.dispatcher):
                     self.plugins[PluginClass.plugin_id] = PluginClass(process_async=args.process_async, barrier=self.barrier)
             except Exception as ex:
                 print(ex)
-            
-
-
+        
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         print('sending acknowledgement to', address)
         

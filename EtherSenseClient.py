@@ -155,7 +155,7 @@ class EtherSenseClient(asyncore.dispatcher):
         return True
         
     def handle_connect(self):
-        print("connection recieved")
+        print("connection received")
 
     def handle_accept(self):
         pair = self.accept()
