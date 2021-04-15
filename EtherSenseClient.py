@@ -11,23 +11,14 @@ import argparse
 import importlib
 from plugins import import_plugins
 import time
-
-from pythonosc import udp_client
-
 import zmq
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
 parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
                     help='a list of plugins')
-
-parser.add_argument('--osc_ip', default='127.0.0.1')
-parser.add_argument('--osc_port', type=int, default=8888)
 parser.add_argument('--gui', action='store_true')
 
-
 args = parser.parse_args()
-
-osc_client = udp_client.SimpleUDPClient(args.osc_ip, args.osc_port)
 
 mc_ip_address = '224.0.0.1'
 
@@ -35,8 +26,6 @@ port = 1024
 chunk_size = 4096
 
 def main():
-    #multi_cast_message(mc_ip_address, port, 'EtherSensePing')
-    # defer waiting for a response using Asyncore
     client = EtherSenseClient()
     asyncore.loop()
 
