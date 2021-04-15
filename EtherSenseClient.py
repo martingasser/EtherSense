@@ -75,28 +75,20 @@ class ZmqDispatcher(asyncore.dispatcher):
             self.handle_read()
             revents = self.socket.getsockopt(zmq.EVENTS)
 
-    def handle_read(self):
-        print("ERROR: You should overwrite the handle_read method!!!")
-
 
 class ImageClient(ZmqDispatcher):
     def __init__(self, socket):
         ZmqDispatcher.__init__(self, socket)
 
-        self.run_surface = True
-        self.run_yolo = True
-
-        #self.port = source[1]
         self.plugins = None
         if args.plugins:
             self.plugins = import_plugins(args.plugins)
         
         self.buffer = bytearray()
-        #self.windowName = self.port
+        # self.windowName = self.port
         # open cv window which is unique to the port
         # if args.gui:
         #     cv2.namedWindow("window"+str(self.windowName))
-        self.frame_id = 0
        
     def handle_read(self):
         topic, data = self.socket.recv_multipart()
@@ -115,11 +107,9 @@ class ImageClient(ZmqDispatcher):
         else:
             plugin_id = topic
             if plugin_id in self.plugins:
+                plugin_features_name = f'{plugin_id.decode()}_features'
                 deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer)
-                if plugin_id == b'yolo':
-                    self.yolo_features = deserialized_features
-                elif plugin_id == b'surf':
-                    self.surf_features = deserialized_features
+                setattr(self, plugin_features_name, deserialized_features)
 
     def process_data(self):
 
@@ -136,14 +126,14 @@ class ImageClient(ZmqDispatcher):
 
             osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
             osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
-
-
+            
         if hasattr(self, 'yolo_features'):
+            plugin_features = getattr(self, 'yolo_features')
             color = (255, 0, 0)
             
             classes = []
             if hasattr(self, 'color_array'):
-                for (classname, score, box) in zip(self.yolo_features['classes'], self.yolo_features['scores'], self.yolo_features['boxes']):
+                for (classname, score, box) in zip(plugin_features['classes'], plugin_features['scores'], plugin_features['boxes']):
                     label = "%s : %f" % (classname, score)
                     cv2.rectangle(self.color_array, box, color, 2)
                     cv2.putText(self.color_array, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
@@ -204,6 +194,9 @@ class EtherSenseClient(asyncore.dispatcher):
 
             self.connected = True
             handler = ImageClient(zmq_socket)
+        
+    def handle_close(self):
+        self.connected = False
     
     def handle_write(self):
         self.socket.sendto(b'ping', (mc_ip_address, port))
