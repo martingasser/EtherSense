@@ -50,26 +50,33 @@ class ZmqDispatcher(asyncore.dispatcher):
 
     def writable(self):
         return False
-    
+        
     def send(self, data, *args):
         self.socket.send(data, *args)
     
     def recv(self, *args):
         return self.socket.recv(*args)
 
+    def close(self):
+        self.socket.close()
+        super().close()
+
     def handle_read_event(self):
         # check if really readable
         revents = self.socket.getsockopt(zmq.EVENTS)
         while revents & zmq.POLLIN:
             self.handle_read()
+            if self.socket.closed:
+                break
             revents = self.socket.getsockopt(zmq.EVENTS)
 
 
 class ImageClient(ZmqDispatcher):
-    def __init__(self, socket):
+    def __init__(self, socket, ethersense_client):
         ZmqDispatcher.__init__(self, socket)
 
-        self.plugins = None
+        self.ethersense_client = ethersense_client
+        self.plugins = []
         if args.plugins:
             self.plugins = import_plugins(args.plugins)
         
@@ -112,9 +119,6 @@ class ImageClient(ZmqDispatcher):
             if hasattr(self, 'color_array'):
                 cv2.putText(self.color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
                 cv2.putText(self.color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-
-            osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
-            osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
             
         if hasattr(self, 'yolo_features'):
             plugin_features = getattr(self, 'yolo_features')
@@ -135,6 +139,7 @@ class ImageClient(ZmqDispatcher):
             key = cv2.waitKey(1)
             if key == 27:
                 self.close()
+                self.ethersense_client.close()
     
     def readable(self):
         return True
@@ -143,7 +148,6 @@ class ImageClient(ZmqDispatcher):
 class EtherSenseClient(asyncore.dispatcher):
     def __init__(self):
         asyncore.dispatcher.__init__(self)
-        self.plugin = None
 
         self.connected = False
         self.server_address = ('', 1025)
@@ -182,7 +186,7 @@ class EtherSenseClient(asyncore.dispatcher):
             zmq_socket.subscribe(b'yolo')
 
             self.connected = True
-            handler = ImageClient(zmq_socket)
+            handler = ImageClient(zmq_socket, self)
         
     def handle_close(self):
         self.connected = False
