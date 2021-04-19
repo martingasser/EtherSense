@@ -11,23 +11,14 @@ import argparse
 import importlib
 from plugins import import_plugins
 import time
-
-from pythonosc import udp_client
-
 import zmq
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
 parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
                     help='a list of plugins')
-
-parser.add_argument('--osc_ip', default='127.0.0.1')
-parser.add_argument('--osc_port', type=int, default=8888)
 parser.add_argument('--gui', action='store_true')
 
-
 args = parser.parse_args()
-
-osc_client = udp_client.SimpleUDPClient(args.osc_ip, args.osc_port)
 
 mc_ip_address = '224.0.0.1'
 
@@ -35,8 +26,6 @@ port = 1024
 chunk_size = 4096
 
 def main():
-    #multi_cast_message(mc_ip_address, port, 'EtherSensePing')
-    # defer waiting for a response using Asyncore
     client = EtherSenseClient()
     asyncore.loop()
 
@@ -61,42 +50,41 @@ class ZmqDispatcher(asyncore.dispatcher):
 
     def writable(self):
         return False
-    
+        
     def send(self, data, *args):
         self.socket.send(data, *args)
     
     def recv(self, *args):
         return self.socket.recv(*args)
 
+    def close(self):
+        self.socket.close()
+        super().close()
+
     def handle_read_event(self):
         # check if really readable
         revents = self.socket.getsockopt(zmq.EVENTS)
         while revents & zmq.POLLIN:
             self.handle_read()
+            if self.socket.closed:
+                break
             revents = self.socket.getsockopt(zmq.EVENTS)
-
-    def handle_read(self):
-        print("ERROR: You should overwrite the handle_read method!!!")
 
 
 class ImageClient(ZmqDispatcher):
-    def __init__(self, socket):
+    def __init__(self, socket, ethersense_client):
         ZmqDispatcher.__init__(self, socket)
 
-        self.run_surface = True
-        self.run_yolo = True
-
-        #self.port = source[1]
-        self.plugins = None
+        self.ethersense_client = ethersense_client
+        self.plugins = []
         if args.plugins:
             self.plugins = import_plugins(args.plugins)
         
         self.buffer = bytearray()
-        #self.windowName = self.port
+        # self.windowName = self.port
         # open cv window which is unique to the port
         # if args.gui:
         #     cv2.namedWindow("window"+str(self.windowName))
-        self.frame_id = 0
        
     def handle_read(self):
         topic, data = self.socket.recv_multipart()
@@ -115,11 +103,9 @@ class ImageClient(ZmqDispatcher):
         else:
             plugin_id = topic
             if plugin_id in self.plugins:
+                plugin_features_name = f'{plugin_id.decode()}_features'
                 deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer)
-                if plugin_id == b'yolo':
-                    self.yolo_features = deserialized_features
-                elif plugin_id == b'surf':
-                    self.surf_features = deserialized_features
+                setattr(self, plugin_features_name, deserialized_features)
 
     def process_data(self):
 
@@ -133,17 +119,14 @@ class ImageClient(ZmqDispatcher):
             if hasattr(self, 'color_array'):
                 cv2.putText(self.color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
                 cv2.putText(self.color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-
-            osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
-            osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
-
-
+            
         if hasattr(self, 'yolo_features'):
+            plugin_features = getattr(self, 'yolo_features')
             color = (255, 0, 0)
             
             classes = []
             if hasattr(self, 'color_array'):
-                for (classname, score, box) in zip(self.yolo_features['classes'], self.yolo_features['scores'], self.yolo_features['boxes']):
+                for (classname, score, box) in zip(plugin_features['classes'], plugin_features['scores'], plugin_features['boxes']):
                     label = "%s : %f" % (classname, score)
                     cv2.rectangle(self.color_array, box, color, 2)
                     cv2.putText(self.color_array, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
@@ -156,6 +139,7 @@ class ImageClient(ZmqDispatcher):
             key = cv2.waitKey(1)
             if key == 27:
                 self.close()
+                self.ethersense_client.close()
     
     def readable(self):
         return True
@@ -164,7 +148,6 @@ class ImageClient(ZmqDispatcher):
 class EtherSenseClient(asyncore.dispatcher):
     def __init__(self):
         asyncore.dispatcher.__init__(self)
-        self.plugin = None
 
         self.connected = False
         self.server_address = ('', 1025)
@@ -203,7 +186,10 @@ class EtherSenseClient(asyncore.dispatcher):
             zmq_socket.subscribe(b'yolo')
 
             self.connected = True
-            handler = ImageClient(zmq_socket)
+            handler = ImageClient(zmq_socket, self)
+        
+    def handle_close(self):
+        self.connected = False
     
     def handle_write(self):
         self.socket.sendto(b'ping', (mc_ip_address, port))
