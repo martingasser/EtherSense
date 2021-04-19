@@ -157,12 +157,19 @@ class EtherSenseClient(asyncore.dispatcher):
         self.bind(self.server_address)
 
         self.ping_sent = False
+        self.write_time = None
         self.socket.settimeout(0)
         ttl = struct.pack('@i', 1)
         self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
         
-    def writable(self): 
-        return not self.ping_sent
+    def writable(self):
+        if not self.write_time:
+            return True
+        
+        if self.connected:
+            return False
+
+        return time.time() - self.write_time > 2.0
 
     def readable(self):
         return not self.connected
@@ -194,6 +201,7 @@ class EtherSenseClient(asyncore.dispatcher):
     def handle_write(self):
         self.socket.sendto(b'ping', (mc_ip_address, port))
         self.ping_sent = True
+        self.write_time = time.time()
 
 def signal_handler(sig, frame):    
     sys.exit(0)
