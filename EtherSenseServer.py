@@ -245,6 +245,7 @@ class MulticastServer(asyncore.dispatcher):
                 for plugin_id in plugin_classes:
                     PluginClass = plugin_classes[plugin_id]
                     self.plugins[PluginClass.plugin_id] = PluginClass(process_async=args.process_async, barrier=self.barrier)
+                    print(f'Loaded plugin {plugin_id.decode()}')
             except Exception as ex:
                 print(ex)
 
