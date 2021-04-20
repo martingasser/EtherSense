@@ -77,7 +77,7 @@ def get_camera_data(pipelines, image_filter, align):
         pose_data = pose.get_pose_data()
         pose_mat = np.array([
             pose_data.translation.x, pose_data.translation.y, pose_data.translation.z,
-            pose_data.rotation.x, pose_data.rotation.y, pose_data.rotation.z,
+            pose_data.rotation.x, pose_data.rotation.y, pose_data.rotation.z, pose_data.rotation.w,
             pose_data.velocity.x, pose_data.velocity.y, pose_data.velocity.z,
             pose_data.acceleration.x, pose_data.acceleration.y, pose_data.acceleration.z,
             pose_data.angular_velocity.x, pose_data.angular_velocity.y, pose_data.angular_velocity.z,
@@ -265,7 +265,7 @@ class MulticastServer(asyncore.dispatcher):
         depth_data = pickle.dumps(depth)
         #pose_data = pickle.dumps(pose)
 
-        pose_data = struct.pack('<18d', *pose.tolist())
+        pose_data = struct.pack('<19d', *pose.tolist())
         #pose_data = pickle.dumps(pose.tolist())
 
         ts = struct.pack('<d', timestamp)
