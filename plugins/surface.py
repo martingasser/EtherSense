@@ -17,7 +17,7 @@ class Plugin(EtherSensePlugin):
     def process(self, frame):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur = cv2.blur(gray,(3,3))
-        img_log = (np.log(blur+1)/(np.log(1+np.max(blur))))*255
+        img_log = 255.0 * (np.log(blur+1.0) / (np.log(1.0 + np.max(blur))))
         img_log = np.array(img_log,dtype=np.uint8)
         bilateral = cv2.bilateralFilter(img_log, 5, 75, 75)
         edges = cv2.Canny(bilateral,100,200)

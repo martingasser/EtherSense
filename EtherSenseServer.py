@@ -10,7 +10,6 @@ import struct
 import importlib
 from plugins import import_plugins
 from threading import Barrier
-from pythonosc import udp_client
 import zmq
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
@@ -18,15 +17,7 @@ parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
                     help='a list of plugins')
 parser.add_argument('--process_async', action='store_true')
 
-parser.add_argument('--osc_ip', default='127.0.0.1')
-parser.add_argument('--osc_port', type=int, default=8888)
-
 args = parser.parse_args()
-
-osc_client = None
-
-if args.osc_ip is not None:
-    osc_client = udp_client.SimpleUDPClient(args.osc_ip, args.osc_port)
 
 mc_ip_address = '224.0.0.1'
 port = 1024
@@ -86,7 +77,11 @@ def get_camera_data(pipelines, image_filter, align):
         pose_data = pose.get_pose_data()
         pose_mat = np.array([
             pose_data.translation.x, pose_data.translation.y, pose_data.translation.z,
-            pose_data.rotation.x, pose_data.rotation.y, pose_data.rotation.z
+            pose_data.rotation.x, pose_data.rotation.y, pose_data.rotation.z,
+            pose_data.velocity.x, pose_data.velocity.y, pose_data.velocity.z,
+            pose_data.acceleration.x, pose_data.acceleration.y, pose_data.acceleration.z,
+            pose_data.angular_velocity.x, pose_data.angular_velocity.y, pose_data.angular_velocity.z,
+            pose_data.angular_acceleration.x, pose_data.angular_acceleration.y, pose_data.angular_acceleration.z
         ])
         ts = frames.get_timestamp()
         return color_mat, depth_mat, pose_mat, ts
@@ -148,9 +143,7 @@ class EtherSenseServer(ZmqDispatcher):
                     self.plugins[PluginClass.plugin_id] = PluginClass(process_async=args.process_async, barrier=self.barrier)
             except Exception as ex:
                 print(ex)
-            
-
-
+        
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         print('sending acknowledgement to', address)
         
@@ -159,7 +152,6 @@ class EtherSenseServer(ZmqDispatcher):
         self.decimate_filter.set_option(rs.option.filter_magnitude, 2)
         self.frame_data = ''
         self.connect((address[0], 1024))
-        # self.packet_id = 0
 
         align_to = rs.stream.color
         self.align = rs.align(align_to)
@@ -175,10 +167,6 @@ class EtherSenseServer(ZmqDispatcher):
         #if depth is not None:
         translation = pose[0:3]
         rotation = pose[3:6]
-        if osc_client:
-            osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
-            osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
-
         color_data = pickle.dumps(color)
         depth_data = pickle.dumps(depth)
         pose_data = pickle.dumps(pose)
@@ -198,10 +186,6 @@ class EtherSenseServer(ZmqDispatcher):
                 ser = plugin.serialize_features(features)
                 length_ser = struct.pack('<I', len(ser))
                 plugin_frame_data = b''.join([plugin_frame_data, length_ser, ser])
-
-                if plugin.plugin_id == b'yolo':
-                    if osc_client:
-                        osc_client.send_message('/classes', features['classes'])
 
         frame_data = b''.join([ts, color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
         frame_length = struct.pack('<I', len(frame_data))
@@ -276,9 +260,6 @@ class MulticastServer(asyncore.dispatcher):
 
         translation = pose[0:3]
         rotation = pose[3:6]
-        if osc_client:
-            osc_client.send_message('/translation', [translation[0], translation[1], translation[2]])
-            osc_client.send_message('/rotation', [rotation[0], rotation[1], rotation[2]])
 
         color_data = pickle.dumps(color)
         depth_data = pickle.dumps(depth)
@@ -299,11 +280,6 @@ class MulticastServer(asyncore.dispatcher):
                 features = results[1]
                 ser = plugin.serialize_features(features)
                 self.zmq_socket.send_multipart([plugin.plugin_id, ser])
-
-                if plugin.plugin_id == b'yolo':
-                    if osc_client:
-                        osc_client.send_message('/classes', features['classes'])          
-
 
     def writable(self): 
         return True
