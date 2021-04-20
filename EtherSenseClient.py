@@ -81,14 +81,9 @@ class ImageClient(ZmqDispatcher):
             self.plugins = import_plugins(args.plugins)
         
         self.buffer = bytearray()
-        # self.windowName = self.port
-        # open cv window which is unique to the port
-        # if args.gui:
-        #     cv2.namedWindow("window"+str(self.windowName))
        
     def handle_read(self):
         topic, data = self.socket.recv_multipart()
-        #self.frame_length = struct.unpack('<I', image_data[0:4])
         self.buffer = data
 
         if topic == b'TIME':
@@ -112,6 +107,10 @@ class ImageClient(ZmqDispatcher):
         if hasattr(self, 'pose_array'):
             translation = self.pose_array[0:3]
             rotation = self.pose_array[3:6]
+            velocity = self.pose_array[6:9]
+            acceleration = self.pose_array[9:12]
+            angular_velocity = self.pose_array[12:15]
+            angular_acceleration = self.pose_array[15:18]
         
             translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
             rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
