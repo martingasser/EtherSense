@@ -8,7 +8,7 @@ WorkingDirectory=/home/martin/devel/EtherSense
 User=martin
 Restart=always
 RestartSec=5
-ExecStart=/home/martin/venvs/magicqueen/bin/python3 -u /home/martin/devel/EtherSense/EtherSenseServer.py --plugins plugins.yolo plugins.surface --process_async
+ExecStart=/home/martin/venvs/magicqueen/bin/python3 -u /home/martin/devel/EtherSense/EtherSenseServer.py --plugins plugins.yolo plugins.surface
 
 [Install]
 WantedBy=multi-user.target

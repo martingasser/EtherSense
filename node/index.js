@@ -14,7 +14,7 @@ client.on('message', (msg, info) => {
     const sock = zmq.socket("sub")
 
     sock.connect(`tcp://${info.address}:${info.port}`);
-    sock.subscribe("RGB")
+    sock.subscribe("POSE")
 
     sock.on("message", function(topic, message) {
         console.log(

@@ -94,7 +94,10 @@ class ImageClient(ZmqDispatcher):
         elif topic == b'DEPTH':
             self.depth_array = pickle.loads(self.buffer)
         elif topic == b'POSE':
-            self.pose_array = pickle.loads(self.buffer)
+            #self.pose_array = pickle.loads(self.buffer)
+            #self.pose_array = struct.unpack('<18d', self.buffer)
+            #self.pose_array = pickle.loads(self.buffer)
+            self.pose_array = struct.unpack('<19d', self.buffer)
         else:
             plugin_id = topic
             if plugin_id in self.plugins:
@@ -106,11 +109,11 @@ class ImageClient(ZmqDispatcher):
 
         if hasattr(self, 'pose_array'):
             translation = self.pose_array[0:3]
-            rotation = self.pose_array[3:6]
-            velocity = self.pose_array[6:9]
-            acceleration = self.pose_array[9:12]
-            angular_velocity = self.pose_array[12:15]
-            angular_acceleration = self.pose_array[15:18]
+            rotation = self.pose_array[3:7]
+            velocity = self.pose_array[7:10]
+            acceleration = self.pose_array[10:13]
+            angular_velocity = self.pose_array[13:16]
+            angular_acceleration = self.pose_array[16:19]
         
             translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
             rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
