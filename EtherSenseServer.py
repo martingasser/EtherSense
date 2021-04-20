@@ -126,89 +126,89 @@ class ZmqDispatcher(asyncore.dispatcher):
     def handle_read(self):
         print("ERROR: You should overwrite the handle_read method!!!")
 
-class EtherSenseServer(ZmqDispatcher):
-    def __init__(self, address, pipelines):
+# class EtherSenseServer(ZmqDispatcher):
+#     def __init__(self, address, pipelines):
         
-        ZmqDispatcher.__init__(self)
+#         ZmqDispatcher.__init__(self)
 
-        self.pipelines = pipelines
+#         self.pipelines = pipelines
 
-        self.plugins = {}
-        if args.plugins:
-            self.barrier = Barrier(len(args.plugins))
-            try:
-                plugin_classes = import_plugins(args.plugins)
-                for plugin_id in plugin_classes:
-                    PluginClass = plugin_classes[plugin_id]
-                    self.plugins[PluginClass.plugin_id] = PluginClass(process_async=args.process_async, barrier=self.barrier)
-            except Exception as ex:
-                print(ex)
+#         self.plugins = {}
+#         if args.plugins:
+#             self.barrier = Barrier(len(args.plugins))
+#             try:
+#                 plugin_classes = import_plugins(args.plugins)
+#                 for plugin_id in plugin_classes:
+#                     PluginClass = plugin_classes[plugin_id]
+#                     self.plugins[PluginClass.plugin_id] = PluginClass(process_async=args.process_async, barrier=self.barrier)
+#             except Exception as ex:
+#                 print(ex)
         
-        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        print('sending acknowledgement to', address)
+#         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+#         print('sending acknowledgement to', address)
         
-	    # reduce the resolution of the depth image using post processing
-        self.decimate_filter = rs.decimation_filter()
-        self.decimate_filter.set_option(rs.option.filter_magnitude, 2)
-        self.frame_data = ''
-        self.connect((address[0], 1024))
+# 	    # reduce the resolution of the depth image using post processing
+#         self.decimate_filter = rs.decimation_filter()
+#         self.decimate_filter.set_option(rs.option.filter_magnitude, 2)
+#         self.frame_data = ''
+#         self.connect((address[0], 1024))
 
-        align_to = rs.stream.color
-        self.align = rs.align(align_to)
+#         align_to = rs.stream.color
+#         self.align = rs.align(align_to)
 
-    def handle_connect(self):
-        print("new connection")
+#     def handle_connect(self):
+#         print("new connection")
 
-    def writable(self):
-        return True
+#     def writable(self):
+#         return True
 
-    def update_frame(self):
-        color, depth, pose, timestamp = get_camera_data(self.pipelines, self.decimate_filter, self.align)
-        #if depth is not None:
-        translation = pose[0:3]
-        rotation = pose[3:6]
-        color_data = pickle.dumps(color)
-        depth_data = pickle.dumps(depth)
-        pose_data = pickle.dumps(pose)
-        color_length = struct.pack('<I', len(color_data))
-        depth_length = struct.pack('<I', len(depth_data))
-        pose_length = struct.pack('<I', len(pose_data))
-        # include the current timestamp for the frame
-        ts = struct.pack('<d', timestamp)
+#     def update_frame(self):
+#         color, depth, pose, timestamp = get_camera_data(self.pipelines, self.decimate_filter, self.align)
+#         #if depth is not None:
+#         translation = pose[0:3]
+#         rotation = pose[3:6]
+#         color_data = pickle.dumps(color)
+#         depth_data = pickle.dumps(depth)
+#         pose_data = pickle.dumps(pose)
+#         color_length = struct.pack('<I', len(color_data))
+#         depth_length = struct.pack('<I', len(depth_data))
+#         pose_length = struct.pack('<I', len(pose_data))
+#         # include the current timestamp for the frame
+#         ts = struct.pack('<d', timestamp)
 
-        plugin_frame_data = b''
+#         plugin_frame_data = b''
 
-        for plugin_id in self.plugins:
-            plugin = self.plugins[plugin_id]
-            results = plugin(color.copy())
-            if results is not None:
-                features = results[1]
-                ser = plugin.serialize_features(features)
-                length_ser = struct.pack('<I', len(ser))
-                plugin_frame_data = b''.join([plugin_frame_data, length_ser, ser])
+#         for plugin_id in self.plugins:
+#             plugin = self.plugins[plugin_id]
+#             results = plugin(color.copy())
+#             if results is not None:
+#                 features = results[1]
+#                 ser = plugin.serialize_features(features)
+#                 length_ser = struct.pack('<I', len(ser))
+#                 plugin_frame_data = b''.join([plugin_frame_data, length_ser, ser])
 
-        frame_data = b''.join([ts, color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
-        frame_length = struct.pack('<I', len(frame_data))
-        self.frame_data = b''.join([frame_length, frame_data])
+#         frame_data = b''.join([ts, color_length, depth_length, pose_length, color_data, depth_data, pose_data, plugin_frame_data])
+#         frame_length = struct.pack('<I', len(frame_data))
+#         self.frame_data = b''.join([frame_length, frame_data])
 
-    def handle_write(self):
-	    # first time the handle_write is called
-        if not hasattr(self, 'frame_data'):
-            self.update_frame()
+#     def handle_write(self):
+# 	    # first time the handle_write is called
+#         if not hasattr(self, 'frame_data'):
+#             self.update_frame()
         
-        if self.frame_data is None:
-            return
+#         if self.frame_data is None:
+#             return
 
-	    # the frame has been sent in it entirety so get the latest frame
-        if len(self.frame_data) == 0:
-	        self.update_frame()
-        else:
-    	    # send the remainder of the frame_data until there is no data remaining for transmition
-            remaining_size = self.send(self.frame_data)
-            self.frame_data = self.frame_data[remaining_size:]
+# 	    # the frame has been sent in it entirety so get the latest frame
+#         if len(self.frame_data) == 0:
+# 	        self.update_frame()
+#         else:
+#     	    # send the remainder of the frame_data until there is no data remaining for transmition
+#             remaining_size = self.send(self.frame_data)
+#             self.frame_data = self.frame_data[remaining_size:]
 	
-    def handle_close(self):
-        self.close()
+#     def handle_close(self):
+#         self.close()
 
 class MulticastServer(asyncore.dispatcher):
     def __init__(self, host = mc_ip_address, port=1024):
@@ -263,7 +263,11 @@ class MulticastServer(asyncore.dispatcher):
 
         color_data = pickle.dumps(color)
         depth_data = pickle.dumps(depth)
-        pose_data = pickle.dumps(pose)
+        #pose_data = pickle.dumps(pose)
+
+        pose_data = struct.pack('<18d', *pose.tolist())
+        #pose_data = pickle.dumps(pose.tolist())
+
         ts = struct.pack('<d', timestamp)
 
         self.zmq_socket.send_multipart([b'TIME', ts])
