@@ -119,6 +119,7 @@ async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
                 ser = plugin.serialize_features(features)
                 zmq_socket.send_multipart([plugin.plugin_id, ser])
 
+        await asyncio.sleep(0)
 
 class MulticastServerProtocol:
 
@@ -150,6 +151,12 @@ class MulticastServerProtocol:
         align_to = rs.stream.color
         self.align = rs.align(align_to)
 
+        ctx = zmq.asyncio.Context()
+        zmq_socket = ctx.socket(zmq.PUB)
+        zmq_socket.bind("tcp://*:%d" % port)
+        self.stream_task = asyncio.ensure_future(stream_data(self.pipelines, self.decimate_filter, self.align, zmq_socket, self.plugins))
+
+        
     def connection_made(self, transport):
         self.transport = transport
 
@@ -158,12 +165,6 @@ class MulticastServerProtocol:
 
     def datagram_received(self, data, addr):
         self.transport.sendto(b'pong', addr)
-
-        ctx = zmq.asyncio.Context()
-        zmq_socket = ctx.socket(zmq.PUB)
-        zmq_socket.bind("tcp://*:%d" % port)
-        asyncio.ensure_future(stream_data(self.pipelines, self.decimate_filter, self.align, zmq_socket, self.plugins))
-
 
 import signal
 import sys
