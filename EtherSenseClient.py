@@ -41,7 +41,7 @@ async def receive_from_zmq(zmq_socket, plugins):
             angular_acceleration = pose_array[16:19]
         
             translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
-            rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
+            rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}, {rotation[3]: 0.2f}'
 
             if 'color_array' in received_data:
                 color_array = received_data['color_array']

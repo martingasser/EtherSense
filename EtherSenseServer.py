@@ -92,7 +92,6 @@ def get_camera_data(pipelines, image_filter, align):
 
 
 async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
-
     while (True):
         color, depth, pose, timestamp = get_camera_data(pipelines, decimate_filter, align)
 
