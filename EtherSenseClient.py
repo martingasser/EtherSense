@@ -1,7 +1,7 @@
 #!/usr/bin/python
 import sys, getopt
 import signal
-import asyncore
+import asyncio
 import numpy as np
 import pickle
 import socket
@@ -12,6 +12,7 @@ import importlib
 from plugins import import_plugins
 import time
 import zmq
+import zmq.asyncio
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
 parser.add_argument('--plugins', metavar='N', type=str, nargs='+',
@@ -25,183 +26,130 @@ mc_ip_address = '224.0.0.1'
 port = 1024
 chunk_size = 4096
 
-def main():
-    client = EtherSenseClient()
-    asyncore.loop()
+async def receive_from_zmq(zmq_socket, plugins):
 
+    received_data = {}
 
-class ZmqDispatcher(asyncore.dispatcher):
-
-    def __init__(self, socket, map=None, *args, **kwargs):
-        asyncore.dispatcher.__init__(self, None, map)
-        self.set_socket(socket)
-       
-    def set_socket(self, sock, map=None):
-        self.socket = sock
-        self._fileno = sock.getsockopt(zmq.FD)
-        self.add_channel(map)
-    
-    def bind(self, *args):
-        self.socket.bind(self, *args)
-    
-    def connect(self, *args):
-        self.socket.connect(*args)
-        self.connected = True
-
-    def writable(self):
-        return False
-        
-    def send(self, data, *args):
-        self.socket.send(data, *args)
-    
-    def recv(self, *args):
-        return self.socket.recv(*args)
-
-    def close(self):
-        self.socket.close()
-        super().close()
-
-    def handle_read_event(self):
-        # check if really readable
-        revents = self.socket.getsockopt(zmq.EVENTS)
-        while revents & zmq.POLLIN:
-            self.handle_read()
-            if self.socket.closed:
-                break
-            revents = self.socket.getsockopt(zmq.EVENTS)
-
-
-class ImageClient(ZmqDispatcher):
-    def __init__(self, socket, ethersense_client):
-        ZmqDispatcher.__init__(self, socket)
-
-        self.ethersense_client = ethersense_client
-        self.plugins = []
-        if args.plugins:
-            self.plugins = import_plugins(args.plugins)
-        
-        self.buffer = bytearray()
-       
-    def handle_read(self):
-        topic, data = self.socket.recv_multipart()
-        self.buffer = data
-
-        if topic == b'TIME':
-            self.process_data()
-            self.timestamp = struct.unpack('<d', self.buffer[0:8])[0]
-        elif topic == b'RGB':
-            self.color_array = pickle.loads(self.buffer)
-        elif topic == b'DEPTH':
-            self.depth_array = pickle.loads(self.buffer)
-        elif topic == b'POSE':
-            #self.pose_array = pickle.loads(self.buffer)
-            #self.pose_array = struct.unpack('<18d', self.buffer)
-            #self.pose_array = pickle.loads(self.buffer)
-            self.pose_array = struct.unpack('<19d', self.buffer)
-        else:
-            plugin_id = topic
-            if plugin_id in self.plugins:
-                plugin_features_name = f'{plugin_id.decode()}_features'
-                deserialized_features = self.plugins[plugin_id].deserialize_features(self.buffer)
-                setattr(self, plugin_features_name, deserialized_features)
-
-    def process_data(self):
-
-        if hasattr(self, 'pose_array'):
-            translation = self.pose_array[0:3]
-            rotation = self.pose_array[3:7]
-            velocity = self.pose_array[7:10]
-            acceleration = self.pose_array[10:13]
-            angular_velocity = self.pose_array[13:16]
-            angular_acceleration = self.pose_array[16:19]
+    def process_data():
+        if 'pose_array' in received_data:
+            pose_array = received_data['pose_array']
+            translation = pose_array[0:3]
+            rotation = pose_array[3:7]
+            velocity = pose_array[7:10]
+            acceleration = pose_array[10:13]
+            angular_velocity = pose_array[13:16]
+            angular_acceleration = pose_array[16:19]
         
             translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
             rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}'
 
-            if hasattr(self, 'color_array'):
-                cv2.putText(self.color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-                cv2.putText(self.color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            if 'color_array' in received_data:
+                color_array = received_data['color_array']
+                cv2.putText(color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+                cv2.putText(color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
             
-        if hasattr(self, 'yolo_features'):
-            plugin_features = getattr(self, 'yolo_features')
+        if 'yolo_features' in received_data:
+            plugin_features = received_data['yolo_features']
             color = (255, 0, 0)
             
             classes = []
-            if hasattr(self, 'color_array'):
+            if 'color_array' in received_data:
                 for (classname, score, box) in zip(plugin_features['classes'], plugin_features['scores'], plugin_features['boxes']):
                     label = "%s : %f" % (classname, score)
                     cv2.rectangle(self.color_array, box, color, 2)
                     cv2.putText(self.color_array, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        
-        if hasattr(self, 'color_array'):
+
+        if 'color_array' in received_data:
             if args.gui:
-                cv2.imshow("window", self.color_array)
+                cv2.imshow("window", received_data['color_array'])
+
+    while True:
+        topic, data = await zmq_socket.recv_multipart()
         
+        if topic == b'TIME':
+            if 'timestamp' in received_data:
+                process_data()
+            received_data['timestamp'] = struct.unpack('<d', data[0:8])[0]
+        elif topic == b'RGB':
+            received_data['color_array'] = pickle.loads(data)
+        elif topic == b'DEPTH':
+            received_data['depth_array'] = pickle.loads(data)
+        elif topic == b'POSE':
+            received_data['pose_array'] = struct.unpack('<19d', data)
+        else:
+            plugin_id = topic
+            if plugin_id in plugins:
+                plugin_features_name = f'{plugin_id.decode()}_features'
+                deserialized_features = plugins[plugin_id].deserialize_features(data)
+                received_data[plugin_features_name] = deserialized_features
+
         if args.gui:
             key = cv2.waitKey(1)
             if key == 27:
-                self.close()
-                self.ethersense_client.close()
-    
-    def readable(self):
-        return True
+                break
 
 
-class EtherSenseClient(asyncore.dispatcher):
-    def __init__(self):
-        asyncore.dispatcher.__init__(self)
+class DiscoveryClientProtocol:
+    def __init__(self, loop):
+        self.loop = loop
+        self.transport = None
 
-        self.connected = False
-        self.server_address = ('', 1025)
+    def connection_made(self, transport):
+        self.transport = transport
+        sock = self.transport.get_extra_info('socket')
+        sock.settimeout(0)
+        ttl = struct.pack('b', 1)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
-        self.create_socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.transport.sendto(b'ping', (mc_ip_address, port))
+        print("Sent ping")
 
-        self.bind(self.server_address)
+    def datagram_received(self, data, addr):
+        print("Reply from {}: {!r}".format(addr, data))
 
-        self.ping_sent = False
-        self.socket.settimeout(0)
-        ttl = struct.pack('@i', 1)
-        self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+        ctx = zmq.asyncio.Context()
+        zmq_socket = ctx.socket(zmq.SUB)
+        zmq_socket.connect(f'tcp://{addr[0]}:{addr[1]}')
         
-    def writable(self): 
-        return not self.ping_sent
+        zmq_socket.subscribe(b'TIME')
+        zmq_socket.subscribe(b'RGB')
+        zmq_socket.subscribe(b'DEPTH')
+        zmq_socket.subscribe(b'POSE')
+        zmq_socket.subscribe(b'yolo')
 
-    def readable(self):
-        return not self.connected
+        plugins = []
+        if args.plugins:
+            plugins = import_plugins(args.plugins)
         
-    def handle_read(self):
-        pair = self.socket.recvfrom(1024)
-        
-        if pair is not None:
-            message, addr = pair
-            print(f'Received {message.decode()} from {repr(addr)}')
-            print ('Connecting to EtherSense server at %s' % repr(addr))
-            
-            ctx = zmq.Context()
-            zmq_socket = ctx.socket(zmq.SUB)
-            zmq_socket.connect(f'tcp://{addr[0]}:{addr[1]}')
-            
-            zmq_socket.subscribe(b'TIME')
-            zmq_socket.subscribe(b'RGB')
-            zmq_socket.subscribe(b'DEPTH')
-            zmq_socket.subscribe(b'POSE')
-            zmq_socket.subscribe(b'yolo')
+        self.task = asyncio.ensure_future(receive_from_zmq(zmq_socket, plugins))
+        self.task.add_done_callback(lambda arg: self.transport.close())
+        # Don't close the socket as we might get multiple responses.
 
-            self.connected = True
-            handler = ImageClient(zmq_socket, self)
-        
-    def handle_close(self):
-        self.connected = False
-    
-    def handle_write(self):
-        self.socket.sendto(b'ping', (mc_ip_address, port))
-        self.ping_sent = True
+    def error_received(self, exc):
+        print('Error received:', exc)
+
+    def connection_lost(self, exc):
+        print("Socket closed, stop the event loop")
+        self.loop.stop()
+
+
 
 def signal_handler(sig, frame):    
     sys.exit(0)
     
 signal.signal(signal.SIGINT, signal_handler)
 
+def main():
+    loop = asyncio.get_event_loop()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    connect = loop.create_datagram_endpoint(
+        lambda: DiscoveryClientProtocol(loop),
+        sock=sock
+    )
+    transport, protocol = loop.run_until_complete(connect)
+    loop.run_forever()
+    transport.close()
+    loop.close()    
 
 if __name__ == '__main__':
     main()
