@@ -95,9 +95,6 @@ async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
     while (True):
         color, depth, pose, timestamp = get_camera_data(pipelines, decimate_filter, align)
 
-        translation = pose[0:3]
-        rotation = pose[3:6]
-
         color_data = pickle.dumps(color)
         depth_data = pickle.dumps(depth)
         pose_data = struct.pack('<19d', *pose.tolist())
