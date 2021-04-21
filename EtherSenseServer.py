@@ -154,6 +154,8 @@ class MulticastServerProtocol:
     def connection_made(self, transport):
         self.transport = transport
 
+    def connection_lost(self, exc):
+        print(exc)
 
     def datagram_received(self, data, addr):
         self.transport.sendto(b'pong', addr)
