@@ -25,9 +25,6 @@ mc_ip_address = '224.0.0.1'
 port = 1024
 chunk_size = 4096
 
-multicast_server = None
-ethersense_server = None
-
 def create_pipelines():
     ctx = rs.context()
     devices = ctx.query_devices()
