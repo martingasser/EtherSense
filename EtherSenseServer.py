@@ -2,7 +2,6 @@
 import pyrealsense2 as rs
 import sys, getopt
 import argparse
-import asyncore
 import asyncio
 import numpy as np
 import pickle
