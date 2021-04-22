@@ -97,10 +97,10 @@ async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
 
         ts = struct.pack('<d', timestamp)
 
-        zmq_socket.send_multipart([b'TIME', ts])
-        zmq_socket.send_multipart([b'RGB', color_data])
-        zmq_socket.send_multipart([b'DEPTH', depth_data])
-        zmq_socket.send_multipart([b'POSE', pose_data])
+        await zmq_socket.send_multipart([b'TIME', ts])
+        await zmq_socket.send_multipart([b'RGB', color_data])
+        await zmq_socket.send_multipart([b'DEPTH', depth_data])
+        await zmq_socket.send_multipart([b'POSE', pose_data])
 
         plugin_frame_data = b''
 
@@ -110,7 +110,7 @@ async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
             if results is not None:
                 features = results[1]
                 ser = plugin.serialize_features(features)
-                zmq_socket.send_multipart([plugin.plugin_id, ser])
+                await zmq_socket.send_multipart([plugin.plugin_id, ser])
 
         await asyncio.sleep(0)
 
