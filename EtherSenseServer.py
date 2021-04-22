@@ -158,7 +158,7 @@ class MulticastServerProtocol:
         self.transport = transport
 
     def connection_lost(self, exc):
-        print(exc)
+        self.stream_task.cancel()
 
     def datagram_received(self, data, addr):
         self.transport.sendto(b'pong', addr)
@@ -166,10 +166,10 @@ class MulticastServerProtocol:
 import signal
 import sys
 
-def signal_handler(sig, frame):    
-    sys.exit(0)
+#def signal_handler(sig, frame):    
+#    sys.exit(0)
     
-signal.signal(signal.SIGINT, signal_handler)
+#signal.signal(signal.SIGINT, signal_handler)
 
 def main(argv):
     loop = asyncio.get_event_loop()
@@ -186,9 +186,17 @@ def main(argv):
     )
 
     transport, protocol = loop.run_until_complete(connect)
-    loop.run_forever()
-    transport.close()
-    loop.close()
+
+    def shutdown_handler():
+        loop.stop()
+    loop.add_signal_handler(signal.SIGINT, shutdown_handler)
+
+    try:
+        loop.run_forever()
+    finally:
+        transport.close()
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
    
 if __name__ == '__main__':
     main(sys.argv[1:])
