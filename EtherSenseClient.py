@@ -54,45 +54,58 @@ async def receive_from_zmq(zmq_socket, plugins):
             
             classes = []
             if 'color_array' in received_data:
+                color_array = received_data['color_array']
                 for (classname, score, box) in zip(plugin_features['classes'], plugin_features['scores'], plugin_features['boxes']):
                     label = "%s : %f" % (classname, score)
-                    cv2.rectangle(self.color_array, box, color, 2)
-                    cv2.putText(self.color_array, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    cv2.rectangle(color_array, box, color, 2)
+                    cv2.putText(color_array, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         if 'color_array' in received_data:
             if args.gui:
                 cv2.imshow("window", received_data['color_array'])
 
     while True:
-        topic, data = await zmq_socket.recv_multipart()
-        
-        if topic == b'TIME':
-            if 'timestamp' in received_data:
-                process_data()
-            received_data['timestamp'] = struct.unpack('<d', data[0:8])[0]
-        elif topic == b'RGB':
-            received_data['color_array'] = pickle.loads(data)
-        elif topic == b'DEPTH':
-            received_data['depth_array'] = pickle.loads(data)
-        elif topic == b'POSE':
-            received_data['pose_array'] = struct.unpack('<19d', data)
-        else:
-            plugin_id = topic
-            if plugin_id in plugins:
-                plugin_features_name = f'{plugin_id.decode()}_features'
-                deserialized_features = plugins[plugin_id].deserialize_features(data)
-                received_data[plugin_features_name] = deserialized_features
+        try:
+            topic, data = await zmq_socket.recv_multipart()
+            if topic == b'TIME':
+                if 'timestamp' in received_data:
+                    process_data()
+                received_data['timestamp'] = struct.unpack('<d', data[0:8])[0]
+            elif topic == b'RGB':
+                received_data['color_array'] = pickle.loads(data)
+            elif topic == b'DEPTH':
+                received_data['depth_array'] = pickle.loads(data)
+            elif topic == b'POSE':
+                received_data['pose_array'] = struct.unpack('<19d', data)
+            else:
+                plugin_id = topic
+                if plugin_id in plugins:
+                    plugin_features_name = f'{plugin_id.decode()}_features'
+                    deserialized_features = plugins[plugin_id].deserialize_features(data)
+                    received_data[plugin_features_name] = deserialized_features
 
-        if args.gui:
-            key = cv2.waitKey(1)
-            if key == 27:
-                break
+            if args.gui:
+                key = cv2.waitKey(1)
+                if key == 27:
+                    break
+        except asyncio.CancelledError:
+            raise
 
+
+async def send_ping(transport, address):
+    while True:
+        try:
+            transport.sendto(b'ping', address)
+            print(f'Sent ping to {str(address)}')
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            raise
 
 class DiscoveryClientProtocol:
     def __init__(self, loop):
         self.loop = loop
         self.transport = None
+        self.ctx = None
 
     def connection_made(self, transport):
         self.transport = transport
@@ -101,43 +114,45 @@ class DiscoveryClientProtocol:
         ttl = struct.pack('b', 1)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
-        self.transport.sendto(b'ping', (mc_ip_address, port))
-        print("Sent ping")
+        self.ping_task = asyncio.ensure_future(send_ping(self.transport, (mc_ip_address, port)))
 
     def datagram_received(self, data, addr):
-        print("Reply from {}: {!r}".format(addr, data))
+        print("Received {!r} from {}".format(data, addr))
 
-        ctx = zmq.asyncio.Context()
-        zmq_socket = ctx.socket(zmq.SUB)
-        zmq_socket.connect(f'tcp://{addr[0]}:{addr[1]}')
-        
-        zmq_socket.subscribe(b'TIME')
-        zmq_socket.subscribe(b'RGB')
-        zmq_socket.subscribe(b'DEPTH')
-        zmq_socket.subscribe(b'POSE')
-        zmq_socket.subscribe(b'yolo')
+        if self.ctx is None:
+            self.ctx = zmq.asyncio.Context()
+            zmq_socket = self.ctx.socket(zmq.SUB)
+            zmq_socket.connect(f'tcp://{addr[0]}:{addr[1]}')
+            
+            zmq_socket.subscribe(b'TIME')
+            zmq_socket.subscribe(b'RGB')
+            zmq_socket.subscribe(b'DEPTH')
+            zmq_socket.subscribe(b'POSE')
+            zmq_socket.subscribe(b'yolo')
 
-        plugins = []
-        if args.plugins:
-            plugins = import_plugins(args.plugins)
+            plugins = []
+            if args.plugins:
+                plugins = import_plugins(args.plugins)
+            
+            self.receive_task = asyncio.ensure_future(receive_from_zmq(zmq_socket, plugins))
+            #self.receive_task.add_done_callback(lambda arg: self.transport.close())
         
-        self.task = asyncio.ensure_future(receive_from_zmq(zmq_socket, plugins))
-        self.task.add_done_callback(lambda arg: self.transport.close())
-        # Don't close the socket as we might get multiple responses.
 
     def error_received(self, exc):
         print('Error received:', exc)
 
     def connection_lost(self, exc):
-        print("Socket closed, stop the event loop")
-        self.loop.stop()
+        if self.ping_task:
+            self.ping_task.cancel()
+        if self.receive_task:
+            self.receive_task.cancel()
 
 
 
-def signal_handler(sig, frame):    
-    sys.exit(0)
+# def signal_handler(sig, frame):    
+#     sys.exit(0)
     
-signal.signal(signal.SIGINT, signal_handler)
+#signal.signal(signal.SIGINT, signal_handler)
 
 def main():
     loop = asyncio.get_event_loop()
@@ -147,9 +162,18 @@ def main():
         sock=sock
     )
     transport, protocol = loop.run_until_complete(connect)
-    loop.run_forever()
-    transport.close()
-    loop.close()    
+
+    def signal_handler():
+        loop.stop()
+        
+    loop.add_signal_handler(signal.SIGINT, signal_handler )
+
+    try:
+        loop.run_forever()
+    finally:
+        transport.close()
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()    
 
 if __name__ == '__main__':
     main()
