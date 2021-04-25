@@ -121,6 +121,8 @@ class MulticastServerProtocol:
         print("Launching Realsense Camera Server")
         try:
             self.pipelines = create_pipelines()
+            if len(self.pipelines) != 2:
+                print('couldn\'t find Realsense devices.')
         except:
             print("Unexpected error: ", sys.exc_info()[1])
             sys.exit(1)
@@ -161,11 +163,6 @@ class MulticastServerProtocol:
 
 import signal
 import sys
-
-#def signal_handler(sig, frame):    
-#    sys.exit(0)
-    
-#signal.signal(signal.SIGINT, signal_handler)
 
 def main(argv):
     loop = asyncio.get_event_loop()
