@@ -12,6 +12,7 @@ from plugins import import_plugins
 from threading import Barrier
 import zmq
 import zmq.asyncio
+import math as m
 
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
@@ -72,10 +73,19 @@ def get_camera_data(pipelines, image_filter, align):
         color_mat = np.asanyarray(color_filtered.as_frame().get_data())
         depth_mat = np.asanyarray(depth_filtered.as_frame().get_data())
         
+        x = pose_data.rotation.x
+        y = pose_data.rotation.y
+        z = pose_data.rotation.z
+        w = pose_data.rotation.w
+
+        pitch =  -m.asin(2.0 * (x*z - w*y)) * 180.0 / m.pi
+        yaw   =  m.atan2(2.0 * (w*z + x*y), w*w + x*x - y*y - z*z) * 180.0 / m.pi
+        roll  =  m.atan2(2.0 * (w*x + y*z), w*w - x*x - y*y + z*z) * 180.0 / m.pi
+        
         pose_data = pose.get_pose_data()
         pose_mat = np.array([
             pose_data.translation.x, pose_data.translation.y, pose_data.translation.z,
-            pose_data.rotation.x, pose_data.rotation.y, pose_data.rotation.z, pose_data.rotation.w,
+            pitch, yaw, roll,
             pose_data.velocity.x, pose_data.velocity.y, pose_data.velocity.z,
             pose_data.acceleration.x, pose_data.acceleration.y, pose_data.acceleration.z,
             pose_data.angular_velocity.x, pose_data.angular_velocity.y, pose_data.angular_velocity.z,
@@ -93,7 +103,7 @@ async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
 
         color_data = pickle.dumps(color)
         depth_data = pickle.dumps(depth)
-        pose_data = struct.pack('<19d', *pose.tolist())
+        pose_data = struct.pack('<18d', *pose.tolist())
 
         ts = struct.pack('<d', timestamp)
 

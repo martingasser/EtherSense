@@ -41,7 +41,7 @@ async def receive_from_zmq(zmq_socket, plugins, queue):
             elif topic == b'DEPTH':
                 received_data['depth_array'] = pickle.loads(data)
             elif topic == b'POSE':
-                received_data['pose_array'] = struct.unpack('<19d', data)
+                received_data['pose_array'] = struct.unpack('<18d', data)
             else:
                 plugin_id = topic
                 if plugin_id in plugins:
@@ -69,14 +69,14 @@ def process_display_data(received_data):
     if 'pose_array' in received_data:
         pose_array = received_data['pose_array']
         translation = pose_array[0:3]
-        rotation = pose_array[3:7]
-        velocity = pose_array[7:10]
-        acceleration = pose_array[10:13]
-        angular_velocity = pose_array[13:16]
-        angular_acceleration = pose_array[16:19]
+        rotation = pose_array[3:6]
+        velocity = pose_array[6:9]
+        acceleration = pose_array[9:12]
+        angular_velocity = pose_array[12:15]
+        angular_acceleration = pose_array[15:18]
     
-        translation_text = f'Translation: {translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f}'
-        rotation_text = f'Rotation: {rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f}, {rotation[3]: 0.2f}'
+        translation_text = f'tx: {translation[0]: 0.2f}, ty: {translation[1]: 0.2f}, tz: {translation[2]: 0.2f}'
+        rotation_text = f'Pitch: {rotation[0]: 0.2f}, Yaw: {rotation[1]: 0.2f}, Roll: {rotation[2]: 0.2f}'
 
         if 'color_array' in received_data:
             color_array = received_data['color_array']
