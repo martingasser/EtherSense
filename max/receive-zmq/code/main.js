@@ -24,11 +24,11 @@ Max.addHandler('bang', () => {
                 const data = struct.unpack('<19d', message)
                 Max.outlet({
                     translation: data.slice(0, 3),
-                    rotation: data.slice(3,7),
-                    velocity: data.slice(7,10),
-                    acceleration: data.slice(10,13),
-                    angular_velocity: data.slice(13,16),
-                    angular_acceleration: data.slice(16,19)
+                    rotation: data.slice(3,6),
+                    velocity: data.slice(6,9),
+                    acceleration: data.slice(9,12),
+                    angular_velocity: data.slice(12,15),
+                    angular_acceleration: data.slice(15,18)
                 })
             }
         })
