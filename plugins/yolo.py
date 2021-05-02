@@ -7,7 +7,7 @@ import pickle
 import struct
 
 
-CONFIDENCE_THRESHOLD = 0.2
+CONFIDENCE_THRESHOLD = 0.1
 NMS_THRESHOLD = 0.4
 
 class Plugin(EtherSensePlugin):
