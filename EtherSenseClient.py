@@ -104,6 +104,10 @@ def process_display_data(received_data):
                 cv2.rectangle(color_array, box, color, 2)
                 cv2.putText(color_array, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
+    if 'weed_features' in received_data:
+        weed_features = received_data['weed_features']
+        print(weed_features)
+
     return color_array
 
 
@@ -149,6 +153,7 @@ class DiscoveryClientProtocol:
             zmq_socket.subscribe(b'DEPTH')
             zmq_socket.subscribe(b'POSE')
             zmq_socket.subscribe(b'yolo')
+            zmq_socket.subscribe(b'weed')
 
             plugins = []
             if args.plugins:

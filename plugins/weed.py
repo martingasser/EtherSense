@@ -52,15 +52,15 @@ class Plugin(EtherSensePlugin):
     @staticmethod
     def serialize_features(features):
         id_ser = Plugin.plugin_id
-        weed_percentage_ser = struct.pack('<d', features['weed_percentage'])
+        weed_percentage_ser = struct.pack('<f', features['weed_percentage'])
         return b''.join([id_ser, weed_percentage_ser])
 
     
     @staticmethod
     def deserialize_features(data):
         id_deser = data[0:4]
-        weed_percentage_deser = struct.unpack('<d', data[4:8])[0]
+        weed_percentage_deser = struct.unpack('<f', data[4:8])[0]
         features = {
-            'weed_percentage': weed_percentage
+            'weed_percentage': weed_percentage_deser
         }
         return features
