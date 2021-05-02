@@ -31,6 +31,7 @@ async def receive_from_zmq(zmq_socket, plugins, queue):
     while True:
         try:
             topic, data = await zmq_socket.recv_multipart()
+            
             if topic == b'TIME':
                 if 'timestamp' in received_data:
                     #res = process_data()
@@ -60,7 +61,7 @@ async def send_ping(transport, address):
     while True:
         try:
             transport.sendto(b'ping', address)
-            print(f'Sent ping to {str(address)}')
+            #print(f'Sent ping to {str(address)}')
             await asyncio.sleep(1)
         except asyncio.CancelledError:
             raise
@@ -128,7 +129,7 @@ class DiscoveryClientProtocol:
         self.ping_task = asyncio.ensure_future(send_ping(self.transport, (mc_ip_address, port)))
 
     def datagram_received(self, data, addr):
-        print("Received {!r} from {}".format(data, addr))
+        #print("Received {!r} from {}".format(data, addr))
 
         if self.ctx is None:
             self.ctx = zmq.asyncio.Context()
