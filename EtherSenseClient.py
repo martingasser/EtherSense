@@ -76,13 +76,21 @@ def process_display_data(received_data):
         angular_velocity = pose_array[12:15]
         angular_acceleration = pose_array[15:18]
     
-        translation_text = f'tx: {translation[0]: 0.2f}, ty: {translation[1]: 0.2f}, tz: {translation[2]: 0.2f}'
-        rotation_text = f'Pitch: {rotation[0]: 0.2f}, Yaw: {rotation[1]: 0.2f}, Roll: {rotation[2]: 0.2f}'
+        translation_text = f'Translation: ({translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f})'
+        rotation_text = f'Rotation: ({rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f})'
+        velocity_text = f'Velocity: ({velocity[0]: 0.2f}, {velocity[1]: 0.2f}, {velocity[2]: 0.2f})'
+        acceleration_text = f'Acceleration: ({acceleration[0]: 0.2f}, {acceleration[1]: 0.2f}, {acceleration[2]: 0.2f})'
+        angular_velocity_text = f'Angular Velocity ({angular_velocity[0]: 0.2f}, {angular_velocity[1]: 0.2f}, {angular_velocity[2]: 0.2f})'
+        angular_acceleration_text = f'Angular Acceleration: ({angular_acceleration[0]: 0.2f}, {angular_acceleration[1]: 0.2f}, {angular_acceleration[2]: 0.2f})'
 
         if 'color_array' in received_data:
             color_array = received_data['color_array']
             cv2.putText(color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
             cv2.putText(color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.putText(color_array, velocity_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.putText(color_array, acceleration_text, (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.putText(color_array, angular_velocity_text, (10, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.putText(color_array, angular_acceleration_text, (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
         
     if 'yolo_features' in received_data:
         plugin_features = received_data['yolo_features']
