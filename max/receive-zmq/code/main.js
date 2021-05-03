@@ -21,7 +21,7 @@ Max.addHandler('bang', () => {
         
         sock.on("message", function(topic, message) {
             if (topic.toString() == 'POSE') {
-                const data = struct.unpack('<19d', message)
+                const data = struct.unpack('<18d', message)
                 Max.outlet({
                     translation: data.slice(0, 3),
                     rotation: data.slice(3,6),
