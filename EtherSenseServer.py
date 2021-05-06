@@ -46,6 +46,9 @@ def create_pipelines():
             cfg.enable_device(detected_camera)
             cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
             cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            cfg.enable_stream(rs.stream.gyro)
+            cfg.enable_stream(rs.stream.accel)
+
             pipe.start(cfg)
             pipelines['Intel RealSense D435I'] = pipe
         elif 'Intel RealSense T265' in camera_name:
@@ -63,6 +66,8 @@ def get_camera_data(pipelines, image_filter, align):
 
     color = aligned_frames.get_color_frame()
     depth = aligned_frames.get_depth_frame()
+    gyro = aligned_frames.get_gyro_frame()
+    accel = aligned_frames.get_accel_frame()
 
     # frames = pipelines['Intel RealSense T265'].wait_for_frames()
     # pose = frames.get_pose_frame()
