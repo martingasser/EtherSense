@@ -67,6 +67,8 @@ async def send_ping(transport, address):
             raise
 
 def process_display_data(received_data):
+    color_array = received_data['color_array']
+
     if 'pose_array' in received_data:
         pose_array = received_data['pose_array']
         translation = pose_array[0:3]
@@ -84,7 +86,7 @@ def process_display_data(received_data):
         angular_acceleration_text = f'Angular Acceleration: ({angular_acceleration[0]: 0.2f}, {angular_acceleration[1]: 0.2f}, {angular_acceleration[2]: 0.2f})'
 
         if 'color_array' in received_data:
-            color_array = received_data['color_array']
+            #color_array = received_data['color_array']
             cv2.putText(color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
             cv2.putText(color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
             cv2.putText(color_array, velocity_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
