@@ -98,6 +98,8 @@ def get_camera_data(pipelines, image_filter, align):
         ts = frames.get_timestamp()
         return color_mat, depth_mat, pose_mat, ts
         '''
+
+        ts = frames.get_timestamp()
         return color_mat, depth_mat, ts
     else:
         return None, None           
