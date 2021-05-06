@@ -64,16 +64,18 @@ def get_camera_data(pipelines, image_filter, align):
     color = aligned_frames.get_color_frame()
     depth = aligned_frames.get_depth_frame()
 
-    frames = pipelines['Intel RealSense T265'].wait_for_frames()
-    pose = frames.get_pose_frame()
+    # frames = pipelines['Intel RealSense T265'].wait_for_frames()
+    # pose = frames.get_pose_frame()
 
-    if depth and color and pose:
+    # if depth and color and pose:
+    if depth and color:
         color_filtered = image_filter.process(color)
         depth_filtered = image_filter.process(depth)
 
         color_mat = np.asanyarray(color_filtered.as_frame().get_data())
         depth_mat = np.asanyarray(depth_filtered.as_frame().get_data())
 
+        '''
         pose_data = pose.get_pose_data()
         
         x = pose_data.rotation.x
@@ -95,24 +97,27 @@ def get_camera_data(pipelines, image_filter, align):
         ])
         ts = frames.get_timestamp()
         return color_mat, depth_mat, pose_mat, ts
+        '''
+        return color_mat, depth_mat, ts
     else:
         return None, None           
 
 
 async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
     while (True):
-        color, depth, pose, timestamp = get_camera_data(pipelines, decimate_filter, align)
+        # color, depth, pose, timestamp = get_camera_data(pipelines, decimate_filter, align)
+        color, depth, timestamp = get_camera_data(pipelines, decimate_filter, align)
 
         color_data = pickle.dumps(color)
         depth_data = pickle.dumps(depth)
-        pose_data = struct.pack('<18d', *pose.tolist())
+        #pose_data = struct.pack('<18d', *pose.tolist())
 
         ts = struct.pack('<d', timestamp)
 
         await zmq_socket.send_multipart([b'TIME', ts])
         await zmq_socket.send_multipart([b'RGB', color_data])
         await zmq_socket.send_multipart([b'DEPTH', depth_data])
-        await zmq_socket.send_multipart([b'POSE', pose_data])
+        #await zmq_socket.send_multipart([b'POSE', pose_data])
 
         plugin_frame_data = b''
 
@@ -133,8 +138,8 @@ class MulticastServerProtocol:
         print("Launching Realsense Camera Server")
         try:
             self.pipelines = create_pipelines()
-            if len(self.pipelines) != 2:
-                print('couldn\'t find Realsense devices.')
+            #if len(self.pipelines) != 2:
+            #    print('couldn\'t find Realsense devices.')
         except:
             print("Unexpected error: ", sys.exc_info()[1])
             sys.exit(1)
