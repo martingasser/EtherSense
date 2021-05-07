@@ -42,7 +42,7 @@ async def receive_from_zmq(zmq_socket, plugins, queue):
             elif topic == b'DEPTH':
                 received_data['depth_array'] = pickle.loads(data)
             elif topic == b'POSE':
-                received_data['pose_array'] = struct.unpack('<18d', data)
+                received_data['pose_array'] = struct.unpack('<6d', data)
             else:
                 plugin_id = topic
                 if plugin_id in plugins:
@@ -71,28 +71,16 @@ def process_display_data(received_data):
 
     if 'pose_array' in received_data:
         pose_array = received_data['pose_array']
-        translation = pose_array[0:3]
-        rotation = pose_array[3:6]
-        velocity = pose_array[6:9]
-        acceleration = pose_array[9:12]
-        angular_velocity = pose_array[12:15]
-        angular_acceleration = pose_array[15:18]
+        acceleration = pose_array[0:3]
+        gyro = pose_array[3:6]
     
-        translation_text = f'Translation: ({translation[0]: 0.2f}, {translation[1]: 0.2f}, {translation[2]: 0.2f})'
-        rotation_text = f'Rotation: ({rotation[0]: 0.2f}, {rotation[1]: 0.2f}, {rotation[2]: 0.2f})'
-        velocity_text = f'Velocity: ({velocity[0]: 0.2f}, {velocity[1]: 0.2f}, {velocity[2]: 0.2f})'
         acceleration_text = f'Acceleration: ({acceleration[0]: 0.2f}, {acceleration[1]: 0.2f}, {acceleration[2]: 0.2f})'
-        angular_velocity_text = f'Angular Velocity ({angular_velocity[0]: 0.2f}, {angular_velocity[1]: 0.2f}, {angular_velocity[2]: 0.2f})'
-        angular_acceleration_text = f'Angular Acceleration: ({angular_acceleration[0]: 0.2f}, {angular_acceleration[1]: 0.2f}, {angular_acceleration[2]: 0.2f})'
+        gyro_text = f'Gyro ({gyro[0]: 0.2f}, {gyro[1]: 0.2f}, {gyro[2]: 0.2f})'
 
         if 'color_array' in received_data:
             #color_array = received_data['color_array']
-            cv2.putText(color_array, translation_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-            cv2.putText(color_array, rotation_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-            cv2.putText(color_array, velocity_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-            cv2.putText(color_array, acceleration_text, (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-            cv2.putText(color_array, angular_velocity_text, (10, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
-            cv2.putText(color_array, angular_acceleration_text, (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.putText(color_array, acceleration_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
+            cv2.putText(color_array, gyro_text, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (65536), 2, cv2.LINE_AA)
         
     if 'yolo_features' in received_data:
         plugin_features = received_data['yolo_features']
