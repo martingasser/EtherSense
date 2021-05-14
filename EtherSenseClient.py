@@ -131,7 +131,7 @@ class DiscoveryClientProtocol:
         self.ping_task = asyncio.ensure_future(send_ping(self.transport, (mc_ip_address, port)))
 
     def datagram_received(self, data, addr):
-        #print("Received {!r} from {}".format(data, addr))
+        # print("Received {!r} from {}".format(data, addr))
 
         if self.ctx is None:
             self.ctx = zmq.asyncio.Context()

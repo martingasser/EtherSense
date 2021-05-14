@@ -13,6 +13,7 @@ from threading import Barrier
 import zmq
 import zmq.asyncio
 import math as m
+import scipy.stats
 
 
 parser = argparse.ArgumentParser(description='Ethersense client.')
@@ -63,19 +64,30 @@ def create_pipelines():
 def get_camera_data(pipelines, image_filter, align):
     frames = pipelines['Intel RealSense D435I'].wait_for_frames()
     aligned_frames = align.process(frames)
-
+    
     color = aligned_frames.get_color_frame()
     depth = aligned_frames.get_depth_frame()
-    gyro = aligned_frames.get_gyro_frame()
-    accel = aligned_frames.get_accel_frame()
+    
+    def accel_data(accel):
+        return np.asarray([accel.x, accel.y, accel.z])
 
-    # frames = pipelines['Intel RealSense T265'].wait_for_frames()
-    # pose = frames.get_pose_frame()
+    def gyro_data(gyro):
+        return np.asarray([gyro.x, gyro.y, gyro.z])
+
+    accel = accel_data(aligned_frames[2].as_motion_frame().get_motion_data())
+    gyro = gyro_data(aligned_frames[3].as_motion_frame().get_motion_data())
+
+    #print('accel')
+    #print(accel)
+    # print('gyro')
+    # print(gyro)
 
     # if depth and color and pose:
     if depth and color:
-        color_filtered = image_filter.process(color)
-        depth_filtered = image_filter.process(depth)
+        # color_filtered = image_filter.process(color)
+        # depth_filtered = image_filter.process(depth)
+        color_filtered = color
+        depth_filtered = depth
 
         color_mat = np.asanyarray(color_filtered.as_frame().get_data())
         depth_mat = np.asanyarray(depth_filtered.as_frame().get_data())
@@ -105,6 +117,7 @@ def get_camera_data(pipelines, image_filter, align):
         '''
 
         ts = frames.get_timestamp()
+        
         return color_mat, depth_mat, ts
     else:
         return None, None           
@@ -114,6 +127,16 @@ async def stream_data(pipelines, decimate_filter, align, zmq_socket, plugins):
     while (True):
         # color, depth, pose, timestamp = get_camera_data(pipelines, decimate_filter, align)
         color, depth, timestamp = get_camera_data(pipelines, decimate_filter, align)
+
+        #m = np.mean(depth)
+        m = np.median(depth)
+        v = np.var(depth)
+        mi = np.min(depth)
+        ma = np.max(depth)
+        #print(mi,ma, m, np.sqrt(v))
+        iqr = scipy.stats.iqr(depth)
+        print(iqr/m)
+        #print(np.sqrt(v))
 
         color_data = pickle.dumps(color)
         depth_data = pickle.dumps(depth)
